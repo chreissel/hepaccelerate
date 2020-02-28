@@ -126,25 +126,26 @@ def compute_lepton_weights(leps, lepton_x, lepton_y, mask_rows, mask_content, ev
     return per_event_weights
 
 # btagging scale factor 
-def compute_btag_weights(jets, mask_rows, mask_content, sf, jets_met_corrected):
+def compute_btag_weights(jets, mask_rows, mask_content, sf, jets_met_corrected, btagalgorithm):
 
     pJet_weight = NUMPY_LIB.ones(len(mask_content))
 
     for tag in [0, 4, 5]:
         
         if jets_met_corrected:
-            SF_btag = sf.eval('central', tag, abs(jets.eta), jets.pt_nom, jets.btagDeepB, ignore_missing=True) 
+            SF_btag = sf.eval('central', tag, abs(jets.eta), jets.pt_nom, getattr(jets, btagalgorithm), ignore_missing=True) 
         else:
-            SF_btag = sf.eval('central', tag, abs(jets.eta), jets.pt, jets.btagDeepB, ignore_missing=True) 
+            SF_btag = sf.eval('central', tag, abs(jets.eta), jets.pt, getattr(jets, btagalgorithm), ignore_missing=True) 
         if tag == 5:
             SF_btag[jets.hadronFlavour != 5] = 1.
         if tag == 4:
             SF_btag[jets.hadronFlavour != 4] = 1.
+            SF_btag[jets.hadronFlavour == 4] = 1. #DIRTY FIX TO REMOVE WEIGHT CONTRIBUTIONS FROM C JETS! TO BE FIXED! ALSO WOULD BE WRONG FOR UNCERTAINTIES AS THEY ARE CALCULATED FOR C    
         if tag == 0:
             SF_btag[jets.hadronFlavour != 0] = 1.
 
         pJet_weight *= SF_btag
-   
+
     per_event_weights = ha.multiply_in_offsets(jets, pJet_weight, mask_rows, mask_content)
     return per_event_weights
 
