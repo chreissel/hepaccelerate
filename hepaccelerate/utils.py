@@ -138,7 +138,10 @@ class Results(dict):
         k1 = set(d1.keys())
 
         for k in k0.intersection(k1):
-            d_ret[k] = d0[k] + d1[k]
+            if k.endswith('_arrays'):
+                d_ret[k] = NUMPY_LIB.append(d0[k], d1[k], axis=0)
+            else:
+                d_ret[k] = d0[k] + d1[k]
 
         for k in k0.difference(k1):
             d_ret[k] = d0[k]

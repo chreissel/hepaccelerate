@@ -135,14 +135,14 @@ def analyze_data(data, sample, NUMPY_LIB=None, parameters={}, samples_info={}, i
         var["btag_weights"] = btag_weights
         weights["nominal"] = weights["nominal"] * btag_weights
         if DNN == "save-arrays":
-            NUMPY_LIB.save(outdir + "weights.npy", weights["nominal"][mask_events==1])
             scalars["njets"] = njets
             scalars["btags"] = btags
-            mask_scalars = {}
+            mask_scalars = Results()
             for key in scalars:
-                mask_scalars[key] = scalars[key][mask_events==1]
+                mask_scalars[key+'_arrays'] = scalars[key][mask_events==1]
             
-            NUMPY_LIB.save(outdir + "evdesc.npy", mask_scalars)
+            ret['weights_arrays'] = weights["nominal"][mask_events==1]
+            ret['evdesc'] = mask_scalars
 
     #in case of data: check if event is in golden lumi file
     if not is_mc and not (lumimask is None):
@@ -152,6 +152,8 @@ def analyze_data(data, sample, NUMPY_LIB=None, parameters={}, samples_info={}, i
     #evaluate DNN
     if DNN:
         DNN_pred = evaluate_DNN(jets, good_jets, electrons, good_electrons, muons, good_muons, scalars, mask_events, nEvents, DNN, DNN_model, jets_met_corrected, outdir, btag_DNN)
+        if DNN == 'save-arrays':
+            ret['jets_arrays'], ret['leps_arrays'], ret['met_arrays'] = DNN_pred
 
     # in case of tt+jets -> split in ttbb, tt2b, ttb, ttcc, ttlf
     processes = {}
@@ -172,7 +174,7 @@ def analyze_data(data, sample, NUMPY_LIB=None, parameters={}, samples_info={}, i
             target[:, 2] = processes["ttb"][mask_events==1]
             target[:, 3] = processes["ttcc"][mask_events==1]
             target[:, 4] = processes["ttlf"][mask_events==1]
-            NUMPY_LIB.save(outdir + "multiclass_target.npy", target)
+            ret['multi_tgt_arrays'] = target
     else:
         processes["unsplit"] = mask_events
 
@@ -434,7 +436,24 @@ if __name__ == "__main__":
             #### this is where the magic happens: run the main analysis
             results += dataset.analyze(analyze_data, NUMPY_LIB=NUMPY_LIB, parameters=parameters, is_mc = is_mc, lumimask=lumimask, cat=args.categories, sample=args.sample, samples_info=samples_info, DNN=args.DNN, DNN_model=model, jets_met_corrected=args.jets_met_corrected, outdir=args.outdir, btag_DNN = args.btag_DNN)
 
-
+    if args.DNN == 'save-arrays':
+        print("results keys: {}".format(results.keys()))
+        NUMPY_LIB.save(outdir + 'jets.npy', results.pop('jets_arrays'))
+        NUMPY_LIB.save(outdir + 'leps.npy', results.pop('leps_arrays'))
+        NUMPY_LIB.save(outdir + 'met.npy', results.pop('met_arrays'))
+        NUMPY_LIB.save(outdir + 'multiclass_tgt.npy', results.pop('multi_tgt_arrays'))
+        NUMPY_LIB.save(outdir + 'weights.npy', results.pop('weights_arrays'))
+        # remove '_arrays' from keys of evdesc
+        evdesc = results.pop('evdesc')
+        keylist = list(evdesc.keys())
+        for i in range(len(keylist)):
+            keylist[i] = keylist[i][:-7]
+        evdesc = dict(zip(keylist, list(evdesc.values())))
+        # save dict with scalars as pickle file
+        import pickle
+        with open(outdir + 'evdesc.pkl', 'wb') as pickle_file:
+            pickle.dump(evdesc, pickle_file)
+        
     print(results)
     #Save the results
     if not os.path.isdir(args.outdir):

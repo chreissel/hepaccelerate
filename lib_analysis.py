@@ -171,9 +171,7 @@ def evaluate_DNN(jets, good_jets, electrons, good_electrons, muons, good_muons, 
         leps_feats = ha.make_leps_inputs(electrons, muons, nEvents, ["pt","eta","phi","en","px","py","pz"], mask_events, good_electrons, good_muons)
         
         if DNN == "save-arrays":
-            NUMPY_LIB.save(outdir + "jets.npy", jets_feats[mask_events==1])
-            NUMPY_LIB.save(outdir + "leps.npy", leps_feats[mask_events==1])
-            NUMPY_LIB.save(outdir + "met.npy", met_feats[mask_events==1])
+            return jets_feats[mask_events==1], leps_feats[mask_events==1], met_feats[mask_events==1]
             
         
         inputs = [jets_feats, leps_feats, met_feats]
