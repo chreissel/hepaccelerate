@@ -152,7 +152,8 @@ def compute_btag_weights(jets, mask_rows, mask_content, sf, jets_met_corrected, 
 ############################################# HIGH LEVEL VARIABLES (DNN evaluation, ...) ############################################
 
 def evaluate_DNN(jets, good_jets, electrons, good_electrons, muons, good_muons, scalars, mask_events, nEvents, DNN, DNN_model, jets_met_corrected, outdir="./"):
-    
+        
+        print("jets_met_corrected is {}".format(jets_met_corrected))
         # make inputs (defined in backend (not extremely nice))
         if jets_met_corrected:
             jets_feats = ha.make_jets_inputs(jets, jets.offsets, 10, ["pt_nom","eta","phi","en","px","py","pz", "btagDeepFlavB"], mask_events, good_jets)
@@ -195,7 +196,7 @@ def evaluate_DNN(jets, good_jets, electrons, good_electrons, muons, good_muons, 
                 inputs=[nodes]
 
         # fix in case inputs are empty
-        if jets_feats.shape[0] == 0:
+        if jets_feats.shape[0] == 0 or DNN=='save-arrays':
             DNN_pred = NUMPY_LIB.zeros(nEvents, dtype=NUMPY_LIB.float32)
         else:
             # run prediction (done on GPU)

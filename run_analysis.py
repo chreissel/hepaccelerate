@@ -138,7 +138,11 @@ def analyze_data(data, sample, NUMPY_LIB=None, parameters={}, samples_info={}, i
             NUMPY_LIB.save(outdir + "weights.npy", weights["nominal"][mask_events==1])
             scalars["njets"] = njets
             scalars["btags"] = btags
-            NUMPY_LIB.save(outdir + "evdesc.npy", scalars[mask_events==1])
+            mask_scalars = {}
+            for key in scalars:
+                mask_scalars[key] = scalars[key][mask_events==1]
+            
+            NUMPY_LIB.save(outdir + "evdesc.npy", mask_scalars)
 
     #in case of data: check if event is in golden lumi file
     if not is_mc and not (lumimask is None):
@@ -147,7 +151,7 @@ def analyze_data(data, sample, NUMPY_LIB=None, parameters={}, samples_info={}, i
 
     #evaluate DNN
     if DNN:
-        DNN_pred = evaluate_DNN(jets, good_jets, electrons, good_electrons, muons, good_muons, scalars, mask_events, nEvents, DNN, DNN_model, outdir)
+        DNN_pred = evaluate_DNN(jets, good_jets, electrons, good_electrons, muons, good_muons, scalars, mask_events, nEvents, DNN, DNN_model, jets_met_corrected, outdir)
 
     # in case of tt+jets -> split in ttbb, tt2b, ttb, ttcc, ttlf
     processes = {}
@@ -415,7 +419,7 @@ if __name__ == "__main__":
 
             # in case of DNN evaluation: load model
             model = None
-            if args.DNN:
+            if args.DNN and args.DNN != 'save-arrays':
                 #model = load_model(args.path_to_model, custom_objects=dict(itertools=itertools, mse0=mse0, mae0=mae0, r2_score0=r2_score0))
                 json_file = open(args.path_to_model + "model.json", "r")
                 loaded_model_json = json_file.read()
