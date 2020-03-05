@@ -26,7 +26,7 @@ from lib_analysis import vertex_selection, lepton_selection, jet_selection, load
 #sess = tf.Session(config=config)
 
 #This function will be called for every file in the dataset
-def analyze_data(data, sample, NUMPY_LIB=None, parameters={}, samples_info={}, is_mc=True, lumimask=None, cat=False, DNN=False, DNN_model=None, jets_met_corrected=True, outdir="./"):
+def analyze_data(data, sample, NUMPY_LIB=None, parameters={}, samples_info={}, is_mc=True, lumimask=None, cat=False, DNN=False, DNN_model=None, jets_met_corrected=True, outdir="./", btag_DNN='deepCSV'):
     #Output structure that will be returned and added up among the files.
     #Should be relatively small.
     ret = Results()
@@ -151,7 +151,7 @@ def analyze_data(data, sample, NUMPY_LIB=None, parameters={}, samples_info={}, i
 
     #evaluate DNN
     if DNN:
-        DNN_pred = evaluate_DNN(jets, good_jets, electrons, good_electrons, muons, good_muons, scalars, mask_events, nEvents, DNN, DNN_model, jets_met_corrected, outdir)
+        DNN_pred = evaluate_DNN(jets, good_jets, electrons, good_electrons, muons, good_muons, scalars, mask_events, nEvents, DNN, DNN_model, jets_met_corrected, outdir, btag_DNN)
 
     # in case of tt+jets -> split in ttbb, tt2b, ttb, ttcc, ttlf
     processes = {}
@@ -288,6 +288,7 @@ if __name__ == "__main__":
     parser.add_argument('--filelist', action='store', help='List of files to load', type=str, default=None, required=False)
     parser.add_argument('--sample', action='store', help='sample name', type=str, default=None, required=True)
     parser.add_argument('--DNN', action='store', choices=['gnet_categorical_binary', 'gnet_fcn_categorical_binary','save-arrays','cmb_binary', 'cmb_multiclass', 'ffwd_binary', 'ffwd_multiclass', 'ffwd_categorical_binary', 'cmb_categorical_binary','cmb_categorical_prtrn_binary',False, 'mass_fit'], help='options for DNN evaluation / preparation', default=False)
+    parser.add_argument('--btag-DNN', action='store', choices=['deepCSV', 'CSVV2','deepFlav'], help='choose which btagger to use for DNN evaluation or saving arrays', default='deepCSV')
     parser.add_argument('--categories', nargs='+', help='categories to be processed (default: sl_jge4_tge2)', default="sl_jge4_tge2")
     parser.add_argument('--path-to-model', action='store', help='path to DNN model', type=str, default=None, required=False)
     parser.add_argument('--year', action='store', choices=['2016', '2017', '2018'], help='Year of data/MC samples', default='2017')
@@ -337,7 +338,7 @@ if __name__ == "__main__":
     arrays_event = [
         "PV_npvsGood", "PV_ndof", "PV_npvs", "PV_score", "PV_x", "PV_y", "PV_z", "PV_chi2",
         "Flag_goodVertices", "Flag_globalSuperTightHalo2016Filter", "Flag_HBHENoiseFilter", "Flag_HBHENoiseIsoFilter", "Flag_EcalDeadCellTriggerPrimitiveFilter", "Flag_BadPFMuonFilter", "Flag_BadChargedCandidateFilter", "Flag_eeBadScFilter", "Flag_ecalBadCalibFilter",
-        "MET_sumEt","genTtbarId",
+        "MET_sumEt",
         "run", "luminosityBlock", "event",
     ]
 
@@ -431,7 +432,7 @@ if __name__ == "__main__":
 
 
             #### this is where the magic happens: run the main analysis
-            results += dataset.analyze(analyze_data, NUMPY_LIB=NUMPY_LIB, parameters=parameters, is_mc = is_mc, lumimask=lumimask, cat=args.categories, sample=args.sample, samples_info=samples_info, DNN=args.DNN, DNN_model=model, jets_met_corrected=args.jets_met_corrected, outdir=args.outdir)
+            results += dataset.analyze(analyze_data, NUMPY_LIB=NUMPY_LIB, parameters=parameters, is_mc = is_mc, lumimask=lumimask, cat=args.categories, sample=args.sample, samples_info=samples_info, DNN=args.DNN, DNN_model=model, jets_met_corrected=args.jets_met_corrected, outdir=args.outdir, btag_DNN = args.btag_DNN)
 
 
     print(results)

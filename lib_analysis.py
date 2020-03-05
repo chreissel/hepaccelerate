@@ -151,15 +151,22 @@ def compute_btag_weights(jets, mask_rows, mask_content, sf, jets_met_corrected, 
 
 ############################################# HIGH LEVEL VARIABLES (DNN evaluation, ...) ############################################
 
-def evaluate_DNN(jets, good_jets, electrons, good_electrons, muons, good_muons, scalars, mask_events, nEvents, DNN, DNN_model, jets_met_corrected, outdir="./"):
+def evaluate_DNN(jets, good_jets, electrons, good_electrons, muons, good_muons, scalars, mask_events, nEvents, DNN, DNN_model, jets_met_corrected, outdir="./", btag_DNN = 'deepCSV'):
         
-        print("jets_met_corrected is {}".format(jets_met_corrected))
+        # choose btag
+        if btag_DNN == 'deepCSV':
+            b_choice = 'btagDeepB'
+        elif btag_DNN == 'CSVV2':
+            b_choice = 'btagCSVV2'
+        elif btag_DNN == 'deepFlav':
+            b_choice = 'btagDeepFlavB'
+        
         # make inputs (defined in backend (not extremely nice))
         if jets_met_corrected:
-            jets_feats = ha.make_jets_inputs(jets, jets.offsets, 10, ["pt_nom","eta","phi","en","px","py","pz", "btagDeepFlavB"], mask_events, good_jets)
+            jets_feats = ha.make_jets_inputs(jets, jets.offsets, 10, ["pt_nom","eta","phi","en","px","py","pz", b_choice], mask_events, good_jets)
             met_feats = ha.make_met_inputs(scalars, nEvents, ["phi_nom","pt_nom","sumEt","px","py"], mask_events)
         else:
-            jets_feats = ha.make_jets_inputs(jets, jets.offsets, 10, ["pt","eta","phi","en","px","py","pz", "btagDeepFlavB"], mask_events, good_jets)
+            jets_feats = ha.make_jets_inputs(jets, jets.offsets, 10, ["pt","eta","phi","en","px","py","pz", b_choice], mask_events, good_jets)
             met_feats = ha.make_met_inputs(scalars, nEvents, ["phi","pt","sumEt","px","py"], mask_events)
         leps_feats = ha.make_leps_inputs(electrons, muons, nEvents, ["pt","eta","phi","en","px","py","pz"], mask_events, good_electrons, good_muons)
         
@@ -200,7 +207,6 @@ def evaluate_DNN(jets, good_jets, electrons, good_electrons, muons, good_muons, 
             DNN_pred = NUMPY_LIB.zeros(nEvents, dtype=NUMPY_LIB.float32)
         else:
             # run prediction (done on GPU)
-            #DNN_pred = DNN_model.predict(inputs, batch_size = 10000)
             # in case of NUMPY_LIB is cupy: transfer numpy output back to cupy array for further computation
             DNN_pred = NUMPY_LIB.array(DNN_model.predict(inputs, batch_size = 10000))
             if 'categorical' in DNN:
