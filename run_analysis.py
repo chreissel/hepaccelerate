@@ -11,21 +11,22 @@ import hepaccelerate
 from hepaccelerate.utils import Results, NanoAODDataset, Histogram, choose_backend
 
 import tensorflow as tf
-from keras.models import load_model, model_from_json
+from tensorflow.keras.models import load_model, model_from_json
 import itertools
 from lib_analysis import mse0,mae0,r2_score0,decorr
+from lib_analysis import trijet_feats, dijet_feats, lep_feats
 
 from definitions_analysis import histogram_settings
 
 import lib_analysis
 from lib_analysis import vertex_selection, lepton_selection, jet_selection, load_puhist_target, compute_pu_weights, compute_lepton_weights, compute_btag_weights, chunks, evaluate_DNN, calculate_variable_features
 
-config = tf.ConfigProto()
-config.gpu_options.allow_growth=True
-sess = tf.Session(config=config)
+#config = tf.ConfigProto()
+#config.gpu_options.allow_growth=True
+#sess = tf.Session(config=config)
 
 #This function will be called for every file in the dataset
-def analyze_data(data, sample, NUMPY_LIB=None, parameters={}, samples_info={}, is_mc=True, lumimask=None, cat=False, DNN=False, DNN_model=None, jets_met_corrected=True):
+def analyze_data(data, sample, NUMPY_LIB=None, parameters={}, samples_info={}, is_mc=True, lumimask=None, cat=False, DNN=False, DNN_model=None, jets_met_corrected=True, outdir="./"):
     #Output structure that will be returned and added up among the files.
     #Should be relatively small.
     ret = Results()
@@ -133,7 +134,11 @@ def analyze_data(data, sample, NUMPY_LIB=None, parameters={}, samples_info={}, i
         btag_weights = compute_btag_weights(jets, mask_events, good_jets, parameters["btag_SF_target"], jets_met_corrected, parameters["btagging algorithm"])
         var["btag_weights"] = btag_weights
         weights["nominal"] = weights["nominal"] * btag_weights
-
+        if DNN == "save-arrays":
+            NUMPY_LIB.save(outdir + "weights.npy", weights["nominal"][mask_events==1])
+            scalars["njets"] = njets
+            scalars["btags"] = btags
+            NUMPY_LIB.save(outdir + "evdesc.npy", scalars[mask_events==1])
 
     #in case of data: check if event is in golden lumi file
     if not is_mc and not (lumimask is None):
@@ -142,7 +147,7 @@ def analyze_data(data, sample, NUMPY_LIB=None, parameters={}, samples_info={}, i
 
     #evaluate DNN
     if DNN:
-        DNN_pred = evaluate_DNN(jets, good_jets, electrons, good_electrons, muons, good_muons, scalars, mask_events, nEvents, DNN, DNN_model)
+        DNN_pred = evaluate_DNN(jets, good_jets, electrons, good_electrons, muons, good_muons, scalars, mask_events, nEvents, DNN, DNN_model, outdir)
 
     # in case of tt+jets -> split in ttbb, tt2b, ttb, ttcc, ttlf
     processes = {}
@@ -154,6 +159,16 @@ def analyze_data(data, sample, NUMPY_LIB=None, parameters={}, samples_info={}, i
         processes["ttcc"] = mask_events & (ttCls >=41) & (ttCls <=45)
         ttHF =  ((ttCls >=53) & (ttCls <=56)) | (ttCls ==52) | (ttCls ==51) | ((ttCls >=41) & (ttCls <=45))
         processes["ttlf"] = mask_events & NUMPY_LIB.invert(ttHF)
+        
+        # in case of multiclassifier, make target and save it!
+        if DNN=="save-arrays":
+            target = np.zeros((mask_events[mask_events==1].shape[0],5))
+            target[:, 0] = processes["ttbb"][mask_events==1]
+            target[:, 1] = processes["tt2b"][mask_events==1]
+            target[:, 2] = processes["ttb"][mask_events==1]
+            target[:, 3] = processes["ttcc"][mask_events==1]
+            target[:, 4] = processes["ttlf"][mask_events==1]
+            NUMPY_LIB.save(outdir + "multiclass_target.npy", target)
     else:
         processes["unsplit"] = mask_events
 
@@ -206,7 +221,7 @@ def analyze_data(data, sample, NUMPY_LIB=None, parameters={}, samples_info={}, i
                 hist = Histogram(*ha.histogram_from_vector(var[k][cut], weights["nominal"][cut], NUMPY_LIB.linspace(histogram_settings[k][0], histogram_settings[k][1], histogram_settings[k][2])))
                 ret["hist_{0}_{1}".format(name, k)] = hist
 
-            if DNN:
+            if DNN and DNN != "save-arrays":
                 if DNN=="mass_fit":
                     hist_DNN = Histogram(*ha.histogram_from_vector(DNN_pred[cut], weights["nominal"][cut], NUMPY_LIB.linspace(0.,300.,30)))
                     hist_DNN_zoom = Histogram(*ha.histogram_from_vector(DNN_pred[cut], weights["nominal"][cut], NUMPY_LIB.linspace(0.,170.,30)))
@@ -268,7 +283,7 @@ if __name__ == "__main__":
     parser.add_argument('--outtag', action='store', help='outtag added to output file', type=str, default="")
     parser.add_argument('--filelist', action='store', help='List of files to load', type=str, default=None, required=False)
     parser.add_argument('--sample', action='store', help='sample name', type=str, default=None, required=True)
-    parser.add_argument('--DNN', action='store', choices=['save-arrays','cmb_binary', 'cmb_multiclass', 'ffwd_binary', 'ffwd_multiclass',False, 'mass_fit'], help='options for DNN evaluation / preparation', default=False)
+    parser.add_argument('--DNN', action='store', choices=['gnet_categorical_binary', 'gnet_fcn_categorical_binary','save-arrays','cmb_binary', 'cmb_multiclass', 'ffwd_binary', 'ffwd_multiclass', 'ffwd_categorical_binary', 'cmb_categorical_binary','cmb_categorical_prtrn_binary',False, 'mass_fit'], help='options for DNN evaluation / preparation', default=False)
     parser.add_argument('--categories', nargs='+', help='categories to be processed (default: sl_jge4_tge2)', default="sl_jge4_tge2")
     parser.add_argument('--path-to-model', action='store', help='path to DNN model', type=str, default=None, required=False)
     parser.add_argument('--year', action='store', choices=['2016', '2017', '2018'], help='Year of data/MC samples', default='2017')
@@ -310,7 +325,7 @@ if __name__ == "__main__":
 
     #define arrays to load: these are objects that will be kept together
     arrays_objects = [
-        "Jet_eta", "Jet_phi", "Jet_btagDeepB", "Jet_btagCSVV2", "Jet_jetId", "Jet_puId", #"Jet_btagDeepFlavB" add for DeepFlavour
+        "Jet_eta", "Jet_phi", "Jet_btagDeepB", "Jet_btagCSVV2", "Jet_jetId", "Jet_puId", "Jet_btagDeepFlavB", #add for DeepFlavour
         "Muon_pt", "Muon_eta", "Muon_phi", "Muon_mass", "Muon_pfRelIso04_all", "Muon_tightId", "Muon_charge", "Muon_pdgId",
         "Electron_pt", "Electron_eta", "Electron_phi", "Electron_mass", "Electron_charge", "Electron_deltaEtaSC", "Electron_cutBased", "Electron_dz", "Electron_dxy", "Electron_pdgId",
     ]
@@ -318,7 +333,7 @@ if __name__ == "__main__":
     arrays_event = [
         "PV_npvsGood", "PV_ndof", "PV_npvs", "PV_score", "PV_x", "PV_y", "PV_z", "PV_chi2",
         "Flag_goodVertices", "Flag_globalSuperTightHalo2016Filter", "Flag_HBHENoiseFilter", "Flag_HBHENoiseIsoFilter", "Flag_EcalDeadCellTriggerPrimitiveFilter", "Flag_BadPFMuonFilter", "Flag_BadChargedCandidateFilter", "Flag_eeBadScFilter", "Flag_ecalBadCalibFilter",
-        "MET_sumEt",
+        "MET_sumEt","genTtbarId",
         "run", "luminosityBlock", "event",
     ]
 
@@ -412,7 +427,7 @@ if __name__ == "__main__":
 
 
             #### this is where the magic happens: run the main analysis
-            results += dataset.analyze(analyze_data, NUMPY_LIB=NUMPY_LIB, parameters=parameters, is_mc = is_mc, lumimask=lumimask, cat=args.categories, sample=args.sample, samples_info=samples_info, DNN=args.DNN, DNN_model=model, jets_met_corrected=args.jets_met_corrected)
+            results += dataset.analyze(analyze_data, NUMPY_LIB=NUMPY_LIB, parameters=parameters, is_mc = is_mc, lumimask=lumimask, cat=args.categories, sample=args.sample, samples_info=samples_info, DNN=args.DNN, DNN_model=model, jets_met_corrected=args.jets_met_corrected, outdir=args.outdir)
 
 
     print(results)

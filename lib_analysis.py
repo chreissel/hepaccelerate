@@ -151,17 +151,23 @@ def compute_btag_weights(jets, mask_rows, mask_content, sf, jets_met_corrected, 
 
 ############################################# HIGH LEVEL VARIABLES (DNN evaluation, ...) ############################################
 
-def evaluate_DNN(jets, good_jets, electrons, good_electrons, muons, good_muons, scalars, mask_events, nEvents, DNN, DNN_model, jets_met_corrected):
+def evaluate_DNN(jets, good_jets, electrons, good_electrons, muons, good_muons, scalars, mask_events, nEvents, DNN, DNN_model, jets_met_corrected, outdir="./"):
     
         # make inputs (defined in backend (not extremely nice))
         if jets_met_corrected:
-            jets_feats = ha.make_jets_inputs(jets, jets.offsets, 10, ["pt_nom","eta","phi","en","px","py","pz", "btagDeepB"], mask_events, good_jets)
+            jets_feats = ha.make_jets_inputs(jets, jets.offsets, 10, ["pt_nom","eta","phi","en","px","py","pz", "btagDeepFlavB"], mask_events, good_jets)
             met_feats = ha.make_met_inputs(scalars, nEvents, ["phi_nom","pt_nom","sumEt","px","py"], mask_events)
         else:
-            jets_feats = ha.make_jets_inputs(jets, jets.offsets, 10, ["pt","eta","phi","en","px","py","pz", "btagDeepB"], mask_events, good_jets)
+            jets_feats = ha.make_jets_inputs(jets, jets.offsets, 10, ["pt","eta","phi","en","px","py","pz", "btagDeepFlavB"], mask_events, good_jets)
             met_feats = ha.make_met_inputs(scalars, nEvents, ["phi","pt","sumEt","px","py"], mask_events)
         leps_feats = ha.make_leps_inputs(electrons, muons, nEvents, ["pt","eta","phi","en","px","py","pz"], mask_events, good_electrons, good_muons)
-
+        
+        if DNN == "save-arrays":
+            NUMPY_LIB.save(outdir + "jets.npy", jets_feats[mask_events==1])
+            NUMPY_LIB.save(outdir + "leps.npy", leps_feats[mask_events==1])
+            NUMPY_LIB.save(outdir + "met.npy", met_feats[mask_events==1])
+            
+        
         inputs = [jets_feats, leps_feats, met_feats]
 
         if DNN.startswith("ffwd"):
@@ -169,22 +175,37 @@ def evaluate_DNN(jets, good_jets, electrons, good_electrons, muons, good_muons, 
             inputs = NUMPY_LIB.hstack(inputs)
             # numpy transfer needed for keras
             inputs = NUMPY_LIB.asnumpy(inputs)
-
+            
         if DNN.startswith("cmb") or DNN.startswith("mass"):
             # numpy transfer needed for keras
+            if "prtrn" in DNN:
+                inputs = [inputs[0], inputs[1], inputs[2], inputs[0], inputs[1], inputs[2], inputs[0], inputs[1], inputs[2]]
             if not isinstance(jets_feats, np.ndarray):
                 inputs = [NUMPY_LIB.asnumpy(x) for x in inputs]
+                
+        if DNN.startswith("gnet"):
+            # implement function which converts jets leps and met into nodes, edges and mask
+            if not isinstance(jets_feats, np.ndarray):
+                inputs = [NUMPY_LIB.asnumpy(x) for x in inputs]
+            edges, nodes, mask = make_graph_input(jets_feats, leps_feats, met_feats)
+            inputs = [edges, nodes, mask]
+            if not isinstance(edges, np.ndarray):
+                inputs = [NUMPY_LIB.asnumpy(x) for x in inputs]
+            if "fcn" in DNN:
+                inputs=[nodes]
 
         # fix in case inputs are empty
         if jets_feats.shape[0] == 0:
             DNN_pred = NUMPY_LIB.zeros(nEvents, dtype=NUMPY_LIB.float32)
         else:
             # run prediction (done on GPU)
-            DNN_pred = DNN_model.predict(inputs, batch_size = 5000)
+            #DNN_pred = DNN_model.predict(inputs, batch_size = 10000)
             # in case of NUMPY_LIB is cupy: transfer numpy output back to cupy array for further computation
-            DNN_pred = NUMPY_LIB.array(DNN_pred)
-            if DNN.endswith("binary"):
-                DNN_pred = NUMPY_LIB.reshape(DNN_pred, (DNN_pred.shape[0], -1))
+            DNN_pred = NUMPY_LIB.array(DNN_model.predict(inputs, batch_size = 10000))
+            if 'categorical' in DNN:
+                DNN_pred = DNN_pred[:,1]
+            #if DNN.endswith("binary"):
+            #    DNN_pred = NUMPY_LIB.reshape(DNN_pred, DNN_pred.shape[0])
 
         print("DNN inference finished.")
         if DNN == "mass_fit":
@@ -204,6 +225,36 @@ def calculate_variable_features(z, mask_events, indices, var):
         var[inds+"_"+name+"_"+f] = ha.get_in_offsets(getattr(coll, f), getattr(coll, "offsets"), idx, mask_events, mask_content)
     
 ####################################################### Simple helpers  #############################################################
+def make_graph_input(jets_ft, leps_ft, met_ft):
+    
+    graph_jets = NUMPY_LIB.zeros((jets_ft.shape[0], jets_ft.shape[1], jets_ft.shape[2]+3))
+    graph_jets[:, :, :8] = jets_ft
+    graph_jets[:, :, 8] = 1
+    
+    graph_leps = NUMPY_LIB.zeros((leps_ft.shape[0], leps_ft.shape[1], leps_ft.shape[2]+4))
+    graph_leps[:, :, :7] = leps_ft
+    graph_leps[:, :, 9] = 1
+    
+    
+    met_ft = NUMPY_LIB.expand_dims(met_ft, 1)
+    # swap phi and pt for met
+    pt_met = NUMPY_LIB.copy(met_ft[:, :, 1])
+    pt_phi = NUMPY_LIB.copy(met_ft[:, :, 0])
+    met_ft[:, :, 0] = pt_met
+    met_ft[:, :, 1] = pt_phi
+    
+    graph_met = NUMPY_LIB.zeros((met_ft.shape[0], met_ft.shape[1], met_ft.shape[2]+6))
+    graph_met[:, :, 0] = met_ft[:, :, 0]
+    graph_met[:, :, 2:6] = met_ft[:, :, 1:]
+    graph_met[:, :, 10] = 1
+    
+    full_nodes = NUMPY_LIB.concatenate((graph_jets, graph_leps, graph_met), axis=1)
+    full_edges = NUMPY_LIB.copy(full_nodes[:, :, 1:3])
+    full_mask = NUMPY_LIB.copy(full_nodes[:, :, 0])
+    full_mask = NUMPY_LIB.expand_dims(full_mask, 2)
+    
+    return full_edges, full_nodes, full_mask
+
 
 def get_histogram(data, weights, bins):
     return Histogram(*ha.histogram_from_vector(data, weights, bins))
@@ -238,4 +289,58 @@ def decorr(var_1, var_2, weights, kappa):
         return keras.losses.categorical_crossentropy(y_true, y_pred) + kappa * distance_corr(var_1, var_2, weights)
 
     return loss
+
+def dijet_feats(x):
+# position depends on input array
+
+    en = x[:,:,3] + x[:,:,11]
+    px = x[:,:,4] + x[:,:,12]
+    py = x[:,:,5] + x[:,:,13]
+    pz = x[:,:,6] + x[:,:,14]
+
+    m = K.sqrt(en*en - px*px - py*py - pz*pz)
+    pt = K.sqrt(px*px + py*py)
+    phi = tf.math.acos(py/px)
+    theta = tf.math.acos(pz/(K.sqrt(px*px + py*py + pz*pz)))
+    eta = -K.log(tf.math.tan(theta/2))
+
+    pt = tf.reshape(pt, [-1,45,1])
+    eta = tf.reshape(eta, [-1,45,1])
+    phi = tf.reshape(phi, [-1,45,1])
+    m = tf.reshape(m, [-1,45,1])
+    return Concatenate(axis=2)([pt, eta, phi, m])
+
+def trijet_feats(x):
+# position depends on input array
+
+    en = x[:,:,3] + x[:,:,11] + x[:,:,19]
+    px = x[:,:,4] + x[:,:,12] + x[:,:,20]
+    py = x[:,:,5] + x[:,:,13] + x[:,:,21]
+    pz = x[:,:,6] + x[:,:,14] + x[:,:,22]
+
+    m = K.sqrt(en*en - px*px - py*py - pz*pz)
+    pt = K.sqrt(px*px + py*py)
+    phi = tf.math.acos(py/px)
+    theta = tf.math.acos(pz/(K.sqrt(px*px + py*py + pz*pz)))
+    eta = -K.log(tf.math.tan(theta/2))
+
+    pt = tf.reshape(pt, [-1,120,1])
+    eta = tf.reshape(eta, [-1,120,1])
+    phi = tf.reshape(phi, [-1,120,1])
+    m = tf.reshape(m, [-1,120,1])
+    return Concatenate(axis=2)([pt, eta, phi, m])
+
+def lep_feats(x):
+# position depends on input array
+
+    px = x[:,:,4] + x[:,:,10] + x[:,:,16]
+    py = x[:,:,5] + x[:,:,11] + x[:,:,17]
+
+    pt = K.sqrt(px*px + py*py)
+    phi = tf.math.acos(py/px)
+
+    pt = tf.reshape(pt, [-1,10,1])
+    phi = tf.reshape(phi, [-1,10,1])
+    return Concatenate(axis=2)([pt, phi])
+
 
