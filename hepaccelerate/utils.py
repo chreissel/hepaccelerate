@@ -4,6 +4,7 @@ import time
 import json
 import numpy as np
 from collections import OrderedDict
+#from lib_analysis import NUMPY_LIB
 
 import uproot
 
@@ -127,6 +128,8 @@ class NumpyEncoder(json.JSONEncoder):
 class Results(dict):
     
     def __init__(self, *args, **kwargs):
+        from lib_analysis import NUMPY_LIB
+        self.NUMPY_LIB = NUMPY_LIB
         super().__init__(*args, **kwargs)
         
     def __add__(self, other):
@@ -139,7 +142,7 @@ class Results(dict):
 
         for k in k0.intersection(k1):
             if k.endswith('_arrays'):
-                d_ret[k] = NUMPY_LIB.append(d0[k], d1[k], axis=0)
+                d_ret[k] = self.NUMPY_LIB.concatenate((d0[k], d1[k]), axis=0)
             else:
                 d_ret[k] = d0[k] + d1[k]
 

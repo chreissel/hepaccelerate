@@ -181,7 +181,7 @@ def analyze_data(data, sample, NUMPY_LIB=None, parameters={}, samples_info={}, i
         
         # in case of multiclassifier, make target and save it!
         if DNN=="save-arrays":
-            target = np.zeros((mask_events[mask_events==1].shape[0],5))
+            target = NUMPY_LIB.zeros((mask_events[mask_events==1].shape[0],5))
             target[:, 0] = processes["ttbb"][mask_events==1]
             target[:, 1] = processes["tt2b"][mask_events==1]
             target[:, 2] = processes["ttb"][mask_events==1]
@@ -454,7 +454,8 @@ if __name__ == "__main__":
         NUMPY_LIB.save(outdir + 'jets.npy', results.pop('jets_arrays'))
         NUMPY_LIB.save(outdir + 'leps.npy', results.pop('leps_arrays'))
         NUMPY_LIB.save(outdir + 'met.npy', results.pop('met_arrays'))
-        NUMPY_LIB.save(outdir + 'multiclass_tgt.npy', results.pop('multi_tgt_arrays'))
+        if args.sample.startswith("TT"):
+            NUMPY_LIB.save(outdir + 'multiclass_tgt.npy', results.pop('multi_tgt_arrays'))
         NUMPY_LIB.save(outdir + 'weights.npy', results.pop('weights_arrays'))
         # remove '_arrays' from keys of evdesc
         evdesc = results.pop('evdesc')

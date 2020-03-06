@@ -136,6 +136,9 @@ def compute_btag_weights(jets, mask_rows, mask_content, sf, jets_met_corrected, 
             SF_btag = sf.eval('central', tag, abs(jets.eta), jets.pt_nom, getattr(jets, btagalgorithm), ignore_missing=True) 
         else:
             SF_btag = sf.eval('central', tag, abs(jets.eta), jets.pt, getattr(jets, btagalgorithm), ignore_missing=True) 
+
+        SF_btag=NUMPY_LIB.array(SF_btag)
+            
         if tag == 5:
             SF_btag[jets.hadronFlavour != 5] = 1.
         if tag == 4:
