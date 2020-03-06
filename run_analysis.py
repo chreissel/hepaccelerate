@@ -21,9 +21,22 @@ from definitions_analysis import histogram_settings
 import lib_analysis
 from lib_analysis import vertex_selection, lepton_selection, jet_selection, load_puhist_target, compute_pu_weights, compute_lepton_weights, compute_btag_weights, chunks, evaluate_DNN, calculate_variable_features
 
-#config = tf.ConfigProto()
-#config.gpu_options.allow_growth=True
-#sess = tf.Session(config=config)
+# For TensorFlow 1.x
+if tf.__version__.startswith('1'):
+    config = tf.ConfigProto()
+    config.gpu_options.allow_growth=True
+    sess = tf.Session(config=config)
+# For TensorFlow 2.x
+if tf.__version__.startswith('2'):
+    gpus = tf.config.experimental.list_physical_devices('GPU')
+    if gpus:
+      try:
+        # Currently, memory growth needs to be the same across GPUs
+        for gpu in gpus:
+          tf.config.experimental.set_memory_growth(gpu, True)
+      except RuntimeError as e:
+        # Memory growth must be set before GPUs have been initialized
+        print(e)
 
 #This function will be called for every file in the dataset
 def analyze_data(data, sample, NUMPY_LIB=None, parameters={}, samples_info={}, is_mc=True, lumimask=None, cat=False, DNN=False, DNN_model=None, jets_met_corrected=True, outdir="./", btag_DNN='deepCSV'):
