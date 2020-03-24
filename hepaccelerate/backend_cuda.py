@@ -213,8 +213,8 @@ def get_in_offsets_cudakernel(content, offsets, indices, mask_rows, mask_content
                     index_to_get += 1
 
 def get_in_offsets(content, offsets, indices, mask_rows, mask_content):
-    out = cupy.zeros(len(offsets) - 1, dtype=content.dtype)
-    #out = -999.*cupy.ones(len(offsets) - 1, dtype=content.dtype) #to avoid histos being filled with 0 for non-existing objects, i.e. in events with no fat jets
+    #out = cupy.zeros(len(offsets) - 1, dtype=content.dtype)
+    out = -999.*cupy.ones(len(offsets) - 1, dtype=content.dtype) #to avoid histos being filled with 0 for non-existing objects, i.e. in events with no fat jets
     get_in_offsets_cudakernel[64, 512](content, offsets, indices, mask_rows, mask_content, out)
     cuda.synchronize()
     return out
@@ -432,10 +432,10 @@ def make_leps_inputs(electrons, muons, numEvents, feats, mask_rows, el_mask_cont
     inds = cupy.zeros(numEvents, dtype=cupy.int32)
 
     feature = {}
-    feature["pt"] = get_in_offsets(muons.pt, muons.offsets, inds, mask_rows, mu_mask_content) + get_in_offsets(electrons.pt, electrons.offsets, inds, mask_rows, el_mask_content)
-    feature["eta"] = get_in_offsets(muons.eta, muons.offsets, inds, mask_rows, mu_mask_content) + get_in_offsets(electrons.eta, electrons.offsets, inds, mask_rows, el_mask_content)
-    feature["phi"] = get_in_offsets(muons.phi, muons.offsets, inds, mask_rows, mu_mask_content) + get_in_offsets(electrons.phi, electrons.offsets, inds, mask_rows, el_mask_content)
-    feature["mass"] = get_in_offsets(muons.mass, muons.offsets, inds, mask_rows, mu_mask_content) + get_in_offsets(electrons.mass, electrons.offsets, inds, mask_rows, el_mask_content)
+    feature["pt"] = cupy.maximum(get_in_offsets(muons.pt, muons.offsets, inds, mask_rows, mu_mask_content), get_in_offsets(electrons.pt, electrons.offsets, inds, mask_rows, el_mask_content))
+    feature["eta"] = cupy.maximum(get_in_offsets(muons.eta, muons.offsets, inds, mask_rows, mu_mask_content), get_in_offsets(electrons.eta, electrons.offsets, inds, mask_rows, el_mask_content))
+    feature["phi"] = cupy.maximum(get_in_offsets(muons.phi, muons.offsets, inds, mask_rows, mu_mask_content), get_in_offsets(electrons.phi, electrons.offsets, inds, mask_rows, el_mask_content))
+    feature["mass"] = cupy.maximum(get_in_offsets(muons.mass, muons.offsets, inds, mask_rows, mu_mask_content), get_in_offsets(electrons.mass, electrons.offsets, inds, mask_rows, el_mask_content))
 
     out = cupy.zeros((numEvents, 1, len(feats)), dtype=cupy.float32)
     for f in feats:
