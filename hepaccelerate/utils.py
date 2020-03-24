@@ -4,6 +4,7 @@ import time
 import json
 import numpy as np
 from collections import OrderedDict
+import copy
 #from lib_analysis import NUMPY_LIB
 
 import uproot
@@ -135,7 +136,7 @@ class Results(dict):
     def __add__(self, other):
         d0 = self
         d1 = other
-        
+
         d_ret = Results({})
         k0 = set(d0.keys())
         k1 = set(d1.keys())
@@ -151,7 +152,7 @@ class Results(dict):
 
         for k in k1.difference(k0):
             d_ret[k] = d1[k]
-
+        
         return d_ret
     
     def save_json(self, outfn):

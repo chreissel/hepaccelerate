@@ -201,7 +201,10 @@ def evaluate_DNN(jets, good_jets, electrons, good_electrons, muons, good_muons, 
             if not isinstance(edges, np.ndarray):
                 inputs = [NUMPY_LIB.asnumpy(x) for x in inputs]
             if "fcn" in DNN:
-                inputs=[nodes]
+                inputs = [NUMPY_LIB.reshape(x, (x.shape[0], -1)) for x in inputs]
+                inputs = NUMPY_LIB.hstack(inputs)
+                # numpy transfer needed for keras
+                inputs = NUMPY_LIB.asnumpy(inputs)
 
         # fix in case inputs are empty
         if jets_feats.shape[0] == 0 or DNN=='save-arrays':
@@ -209,7 +212,7 @@ def evaluate_DNN(jets, good_jets, electrons, good_electrons, muons, good_muons, 
         else:
             # run prediction (done on GPU)
             # in case of NUMPY_LIB is cupy: transfer numpy output back to cupy array for further computation
-            DNN_pred = NUMPY_LIB.array(DNN_model.predict(inputs, batch_size = 10000))
+            DNN_pred = NUMPY_LIB.array(DNN_model.predict(inputs, batch_size = 200))
             if 'categorical' in DNN:
                 DNN_pred = DNN_pred[:,1]
             #if DNN.endswith("binary"):

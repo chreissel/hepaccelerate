@@ -5,10 +5,12 @@ os.environ['KERAS_BACKEND'] = "tensorflow"
 import argparse
 import json
 import numpy as np
+import sys
 
 import uproot
 import hepaccelerate
 from hepaccelerate.utils import Results, NanoAODDataset, Histogram, choose_backend
+import h5py
 
 import tensorflow as tf
 from tensorflow.keras.models import load_model, model_from_json
@@ -38,6 +40,26 @@ if tf.__version__.startswith('2'):
         # Memory growth must be set before GPUs have been initialized
         print(e)
 
+def get_size(obj, seen=None):
+    """Recursively finds size of objects"""
+    size = sys.getsizeof(obj)
+    if seen is None:
+        seen = set()
+    obj_id = id(obj)
+    if obj_id in seen:
+        return 0
+    # Important mark as seen *before* entering recursion to gracefully handle
+    # self-referential objects
+    seen.add(obj_id)
+    if isinstance(obj, dict):
+        size += sum([get_size(v, seen) for v in obj.values()])
+        size += sum([get_size(k, seen) for k in obj.keys()])
+    elif hasattr(obj, '__dict__'):
+        size += get_size(obj.__dict__, seen)
+    elif hasattr(obj, '__iter__') and not isinstance(obj, (str, bytes, bytearray)):
+        size += sum([get_size(i, seen) for i in obj])
+    return size
+
 #This function will be called for every file in the dataset
 def analyze_data(data, sample, NUMPY_LIB=None, parameters={}, samples_info={}, is_mc=True, lumimask=None, cat=False, DNN=False, DNN_model=None, jets_met_corrected=True, outdir="./", btag_DNN='deepCSV'):
     #Output structure that will be returned and added up among the files.
@@ -53,6 +75,14 @@ def analyze_data(data, sample, NUMPY_LIB=None, parameters={}, samples_info={}, i
     indices = {}
     indices["leading"] = NUMPY_LIB.zeros(nEvents, dtype=NUMPY_LIB.int32)
     indices["subleading"] = NUMPY_LIB.ones(nEvents, dtype=NUMPY_LIB.int32)
+    indices["third"] = NUMPY_LIB.full(nEvents, 2, dtype=NUMPY_LIB.int32)
+    indices["fourth"] = NUMPY_LIB.full(nEvents, 3, dtype=NUMPY_LIB.int32)
+    indices["fifth"] = NUMPY_LIB.full(nEvents, 4, dtype=NUMPY_LIB.int32)
+    indices["sixth"] = NUMPY_LIB.full(nEvents, 5, dtype=NUMPY_LIB.int32)
+    indices["seventh"] = NUMPY_LIB.full(nEvents, 6, dtype=NUMPY_LIB.int32)
+    indices["eighth"] = NUMPY_LIB.full(nEvents, 7, dtype=NUMPY_LIB.int32)
+    indices["ninth"] = NUMPY_LIB.full(nEvents, 8, dtype=NUMPY_LIB.int32)
+    indices["tenth"] = NUMPY_LIB.full(nEvents, 9, dtype=NUMPY_LIB.int32)
 
     mask_events = NUMPY_LIB.ones(nEvents, dtype=NUMPY_LIB.bool)
 
@@ -110,14 +140,29 @@ def analyze_data(data, sample, NUMPY_LIB=None, parameters={}, samples_info={}, i
     if jets_met_corrected: pt_label = "pt_nom"
     else: pt_label = "pt"
     variables = [
-        ("jet", jets, good_jets, "leading", [pt_label, "eta"]),
+        ("jet", jets, good_jets, "leading", [pt_label, "eta", "phi", "btagDeepFlavB", "mass"]),
+        ("jet", jets, good_jets, "subleading", [pt_label, "eta", "phi", "btagDeepFlavB", "mass"]),
+        ("jet", jets, good_jets, "third", [pt_label, "eta", "phi", "btagDeepFlavB", "mass"]),
+        ("jet", jets, good_jets, "fourth", [pt_label, "eta", "phi", "btagDeepFlavB", "mass"]),
+        ("jet", jets, good_jets, "fifth", [pt_label, "eta", "phi", "btagDeepFlavB", "mass"]),
+        ("jet", jets, good_jets, "sixth", [pt_label, "eta", "phi", "btagDeepFlavB", "mass"]),
+        ("jet", jets, good_jets, "seventh", [pt_label, "eta", "phi", "btagDeepFlavB", "mass"]),
+        ("jet", jets, good_jets, "eighth", [pt_label, "eta", "phi", "btagDeepFlavB", "mass"]),
+        ("jet", jets, good_jets, "ninth", [pt_label, "eta", "phi", "btagDeepFlavB", "mass"]),
+        ("jet", jets, good_jets, "tenth", [pt_label, "eta", "phi", "btagDeepFlavB", "mass"]),
         ("bjet", jets, bjets, "leading", [pt_label, "eta"]),
     ]
 
     # special role of lepton
     var["leading_lepton_pt"] = NUMPY_LIB.maximum(ha.get_in_offsets(muons.pt, muons.offsets, indices["leading"], mask_events, good_muons), ha.get_in_offsets(electrons.pt, electrons.offsets, indices["leading"], mask_events, good_electrons))
     var["leading_lepton_eta"] = NUMPY_LIB.maximum(ha.get_in_offsets(muons.eta, muons.offsets, indices["leading"], mask_events, good_muons), ha.get_in_offsets(electrons.eta, electrons.offsets, indices["leading"], mask_events, good_electrons))
-
+    var["leading_lepton_phi"] = NUMPY_LIB.maximum(ha.get_in_offsets(muons.phi, muons.offsets, indices["leading"], mask_events, good_muons), ha.get_in_offsets(electrons.phi, electrons.offsets, indices["leading"], mask_events, good_electrons))
+    var["leading_lepton_mass"] = NUMPY_LIB.maximum(ha.get_in_offsets(muons.mass, muons.offsets, indices["leading"], mask_events, good_muons), ha.get_in_offsets(electrons.mass, electrons.offsets, indices["leading"], mask_events, good_electrons))
+    var["MET_pt"] = scalars["MET_pt"]
+    var["MET_phi"] = scalars["MET_phi"]
+    var["MET_sumEt"] = scalars["MET_sumEt"]
+    
+    
     # all other variables
     for v in variables:
         calculate_variable_features(v, mask_events, indices, var)
@@ -149,7 +194,8 @@ def analyze_data(data, sample, NUMPY_LIB=None, parameters={}, samples_info={}, i
         weights["nominal"] = weights["nominal"] * btag_weights
         if DNN == "save-arrays":
             scalars["njets"] = njets
-            scalars["btags"] = btags
+            scalars["n"+btag_DNN] = btags
+            scalars["nleps"] = nleps
             mask_scalars = Results()
             for key in scalars:
                 mask_scalars[key+'_arrays'] = scalars[key][mask_events==1]
@@ -241,13 +287,30 @@ def analyze_data(data, sample, NUMPY_LIB=None, parameters={}, samples_info={}, i
                 ret["hist_{0}_{1}".format(name, k)] = hist
 
             if DNN and DNN != "save-arrays":
-                if DNN=="mass_fit":
+                if DNN.endswith("multiclass"):
+                    # TODO: Find out if class weights should be multiplied here as well
+                    class_pred = NUMPY_LIB.argmax(DNN_pred, axis=1)
+                    for n, n_name in zip([0,1,2,3,4,5], ["ttH", "ttbb", "tt2b", "ttb", "ttcc", "ttlf"]):
+                        node = (class_pred == n)
+                        DNN_node = DNN_pred[:,n]
+                        hist_DNN = Histogram(*ha.histogram_from_vector(DNN_node[(cut & node)], weights["nominal"][(cut & node)], NUMPY_LIB.linspace(0.,1.,16)))
+                        ret["hist_{0}_DNN_{1}".format(name, n_name)] = hist_DNN
+                        hist_DNN_ROC = Histogram(*ha.histogram_from_vector(DNN_node[(cut & node)], weights["nominal"][(cut & node)], NUMPY_LIB.linspace(0.,1.,1000)))
+                        ret["hist_{0}_DNN_ROC_{1}".format(name, n_name)] = hist_DNN_ROC
+                        #hist_DNN_zoom = Histogram(*ha.histogram_from_vector(DNN_pred[(cut & node)], weights["nominal"][(cut & node)], NUMPY_LIB.linspace(0.,170.,30)))
+                        #ret["hist_{0}_DNN_zoom_{1}".format(name, n_name)] = hist_DNN_zoom
+                elif DNN=="mass_fit":
                     hist_DNN = Histogram(*ha.histogram_from_vector(DNN_pred[cut], weights["nominal"][cut], NUMPY_LIB.linspace(0.,300.,30)))
                     hist_DNN_zoom = Histogram(*ha.histogram_from_vector(DNN_pred[cut], weights["nominal"][cut], NUMPY_LIB.linspace(0.,170.,30)))
+                    ret["hist_{0}_DNN".format(name)] = hist_DNN
+                    ret["hist_{0}_DNN_zoom".format(name)] = hist_DNN_zoom
                 else:
                     hist_DNN = Histogram(*ha.histogram_from_vector(DNN_pred[cut], weights["nominal"][cut], NUMPY_LIB.linspace(0.,1.,16)))
-                ret["hist_{0}_DNN".format(name)] = hist_DNN
-                ret["hist_{0}_DNN_zoom".format(name)] = hist_DNN_zoom
+                    hist_DNN_zoom = Histogram(*ha.histogram_from_vector(DNN_pred[cut], weights["nominal"][cut], NUMPY_LIB.linspace(0.,170.,30)))
+                    hist_DNN_ROC = Histogram(*ha.histogram_from_vector(DNN_node[cut], weights["nominal"][cut], NUMPY_LIB.linspace(0.,1.,1000)))
+                    ret["hist_{0}_DNN_ROC".format(name)] = hist_DNN_ROC
+                    ret["hist_{0}_DNN".format(name)] = hist_DNN
+                    ret["hist_{0}_DNN_zoom".format(name)] = hist_DNN_zoom
 
 
     #TODO: implement JECs
@@ -293,7 +356,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Runs a simple array-based analysis')
     parser.add_argument('--use-cuda', action='store_true', help='Use the CUDA backend')
     parser.add_argument('--from-cache', action='store_true', help='Load from cache (otherwise create it)')
-    parser.add_argument('--nthreads', action='store', help='Number of CPU threads to use', type=int, default=4, required=False)
+    parser.add_argument('--nthreads', action='store', help='Number of CPU threads to use', type=int, default=1, required=False)
     parser.add_argument('--files-per-batch', action='store', help='Number of files to process per batch', type=int, default=1, required=False)
     parser.add_argument('--cache-location', action='store', help='Path prefix for the cache, must be writable', type=str, default=os.path.join(os.getcwd(), 'cache'))
     parser.add_argument('--cache-only', action='store_true', help='Produce only cached files')
@@ -302,14 +365,14 @@ if __name__ == "__main__":
     parser.add_argument('--outtag', action='store', help='outtag added to output file', type=str, default="")
     parser.add_argument('--filelist', action='store', help='List of files to load', type=str, default=None, required=False)
     parser.add_argument('--sample', action='store', help='sample name', type=str, default=None, required=True)
-    parser.add_argument('--DNN', action='store', choices=['gnet_categorical_binary', 'gnet_fcn_categorical_binary','save-arrays','cmb_binary', 'cmb_multiclass', 'ffwd_binary', 'ffwd_multiclass', 'ffwd_categorical_binary', 'cmb_categorical_binary','cmb_categorical_prtrn_binary',False, 'mass_fit'], help='options for DNN evaluation / preparation', default=False)
+    parser.add_argument('--DNN', action='store', choices=['gnet_categorical_binary', 'gnet_fcn_categorical_binary', 'gnet_multiclass', 'gnet_fcn_multiclass','save-arrays','cmb_binary', 'cmb_multiclass', 'ffwd_binary', 'ffwd_multiclass', 'ffwd_categorical_binary', 'cmb_categorical_binary','cmb_categorical_prtrn_binary',False, 'mass_fit'], help='options for DNN evaluation / preparation', default=False)
     parser.add_argument('--btag-DNN', action='store', choices=['deepCSV', 'CSVV2','deepFlav'], help='choose which btagger to use for DNN evaluation or saving arrays', default='deepCSV')
     parser.add_argument('--categories', nargs='+', help='categories to be processed (default: sl_jge4_tge2)', default="sl_jge4_tge2")
     parser.add_argument('--path-to-model', action='store', help='path to DNN model', type=str, default=None, required=False)
     parser.add_argument('--year', action='store', choices=['2016', '2017', '2018'], help='Year of data/MC samples', default='2017')
     parser.add_argument('filenames', nargs=argparse.REMAINDER)
     args = parser.parse_args()
-
+    
     # set CPU or GPU backend
     NUMPY_LIB, ha = choose_backend(args.use_cuda)
     lib_analysis.NUMPY_LIB, lib_analysis.ha = NUMPY_LIB, ha
@@ -387,12 +450,27 @@ if __name__ == "__main__":
         if not fn.endswith(".root"):
             print(fn)
             raise Exception("Must supply ROOT filename, but got {0}".format(fn))
+    
+    # in case of DNN evaluation: load model
+    model = None
+    if args.DNN and args.DNN != 'save-arrays' and not args.cache_only:
+        f = h5py.File(args.path_to_model, 'r')
+        model = load_model(f)#, custom_objects=dict(itertools=itertools, mse0=mse0, mae0=mae0, r2_score0=r2_score0))
+        f.close()
+        #json_file = open(args.path_to_model + "model.json", "r")
+        #loaded_model_json = json_file.read()
+        #json_file.close()
+        #model = model_from_json(loaded_model_json, custom_objects=dict(itertools=itertools))
+        #model.load_weights(args.path_to_model + "model.hdf5")
 
+    
+    
     results = Results()
 
 
     for ibatch, files_in_batch in enumerate(chunks(filenames, args.files_per_batch)):
         #define our dataset
+        print("Current file: {}".format(files_in_batch))
         structs = ["Jet", "Muon", "Electron"]
         #dataset = NanoAODDataset(files_in_batch, arrays_objects + arrays_event, "Events", structs, arrays_event)
         dataset = NanoAODDataset(files_in_batch, arrays_objects + arrays_event, "Events", structs, arrays_event)
@@ -433,22 +511,11 @@ if __name__ == "__main__":
             if ibatch == 0:
                 print(dataset.printout())
 
-            # in case of DNN evaluation: load model
-            model = None
-            if args.DNN and args.DNN != 'save-arrays':
-                #model = load_model(args.path_to_model, custom_objects=dict(itertools=itertools, mse0=mse0, mae0=mae0, r2_score0=r2_score0))
-                json_file = open(args.path_to_model + "model.json", "r")
-                loaded_model_json = json_file.read()
-                json_file.close()
-                model = model_from_json(loaded_model_json, custom_objects=dict(itertools=itertools))
-                model.load_weights(args.path_to_model + "model.hdf5")
-
             print(args.categories)
-
 
             #### this is where the magic happens: run the main analysis
             results += dataset.analyze(analyze_data, NUMPY_LIB=NUMPY_LIB, parameters=parameters, is_mc = is_mc, lumimask=lumimask, cat=args.categories, sample=args.sample, samples_info=samples_info, DNN=args.DNN, DNN_model=model, jets_met_corrected=args.jets_met_corrected, outdir=args.outdir, btag_DNN = args.btag_DNN)
-
+            
     if args.DNN == 'save-arrays':
         print("results keys: {}".format(results.keys()))
         NUMPY_LIB.save(outdir + 'jets.npy', results.pop('jets_arrays'))

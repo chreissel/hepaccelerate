@@ -40,7 +40,7 @@ def searchsorted(arr, vals):
     Find indices to insert vals into arr to preserve order.
     """
     ret = cupy.zeros_like(vals, dtype=cupy.int32)
-    searchsorted_kernel[32, 1024](vals, arr, ret)
+    searchsorted_kernel[64, 512](vals, arr, ret)
     return ret 
 
 @cuda.jit
@@ -58,7 +58,7 @@ def histogram_from_vector(data, weights, bins):
     out_w = cupy.zeros(len(bins) - 1, dtype=cupy.float32)
     out_w2 = cupy.zeros(len(bins) - 1, dtype=cupy.float32)
     if not data.shape[0] == 0:
-        fill_histogram[32, 1024](data, weights, bins, out_w, out_w2)
+        fill_histogram[64, 512](data, weights, bins, out_w, out_w2)
     return cupy.asnumpy(out_w), cupy.asnumpy(out_w2), cupy.asnumpy(bins)
 
 @cuda.jit
@@ -108,7 +108,7 @@ def sum_in_offsets(struct, content, mask_rows, mask_content, dtype=None):
     if not dtype:
         dtype = content.dtype
     sum_offsets = cupy.zeros(len(struct.offsets) - 1, dtype=dtype)
-    sum_in_offsets_cudakernel[32, 1024](content, struct.offsets, mask_rows, mask_content, sum_offsets)
+    sum_in_offsets_cudakernel[64, 512](content, struct.offsets, mask_rows, mask_content, sum_offsets)
     cuda.synchronize()
     return sum_offsets
 
@@ -131,7 +131,7 @@ def multiply_in_offsets(struct, content, mask_rows, mask_content, dtype=None):
     if not dtype:
         dtype = content.dtype
     product_offsets = cupy.ones(len(struct.offsets) - 1, dtype=dtype)
-    multiply_in_offsets_cudakernel[32, 1024](content, struct.offsets, mask_rows, mask_content, product_offsets)
+    multiply_in_offsets_cudakernel[64, 512](content, struct.offsets, mask_rows, mask_content, product_offsets)
     cuda.synchronize()
     return product_offsets
 
@@ -160,7 +160,7 @@ def max_in_offsets_cudakernel(content, offsets, mask_rows, mask_content, out):
 
 def max_in_offsets(struct, content, mask_rows, mask_content):
     max_offsets = cupy.zeros(len(struct.offsets) - 1, dtype=content.dtype)
-    max_in_offsets_cudakernel[32, 1024](content, struct.offsets, mask_rows, mask_content, max_offsets)
+    max_in_offsets_cudakernel[64, 512](content, struct.offsets, mask_rows, mask_content, max_offsets)
     cuda.synchronize()
     return max_offsets
 
@@ -188,7 +188,7 @@ def min_in_offsets_cudakernel(content, offsets, mask_rows, mask_content, out):
 
 def min_in_offsets(struct, content, mask_rows, mask_content):
     max_offsets = cupy.zeros(len(struct.offsets) - 1, dtype=content.dtype)
-    min_in_offsets_cudakernel[32, 1024](content, struct.offsets, mask_rows, mask_content, max_offsets)
+    min_in_offsets_cudakernel[64, 512](content, struct.offsets, mask_rows, mask_content, max_offsets)
     cuda.synchronize()
     return max_offsets
 
@@ -215,7 +215,7 @@ def get_in_offsets_cudakernel(content, offsets, indices, mask_rows, mask_content
 def get_in_offsets(content, offsets, indices, mask_rows, mask_content):
     out = cupy.zeros(len(offsets) - 1, dtype=content.dtype)
     #out = -999.*cupy.ones(len(offsets) - 1, dtype=content.dtype) #to avoid histos being filled with 0 for non-existing objects, i.e. in events with no fat jets
-    get_in_offsets_cudakernel[32, 1024](content, offsets, indices, mask_rows, mask_content, out)
+    get_in_offsets_cudakernel[64, 512](content, offsets, indices, mask_rows, mask_content, out)
     cuda.synchronize()
     return out
 
@@ -256,7 +256,7 @@ def mask_deltar_first(objs1, mask1, objs2, mask2, drcut):
     assert(objs1.offsets.shape == objs2.offsets.shape)
 
     mask_out = cupy.zeros_like(objs1.eta, dtype=cupy.bool)
-    mask_deltar_first_cudakernel[32, 1024](
+    mask_deltar_first_cudakernel[64, 512](
         objs1.eta, objs1.phi, mask1, objs1.offsets,
         objs2.eta, objs2.phi, mask2, objs2.offsets,
         drcut**2, mask_out
@@ -278,7 +278,7 @@ def get_bin_contents_cudakernel(values, edges, contents, out):
 def get_bin_contents(values, edges, contents, out):
     assert(values.shape == out.shape)
     assert(edges.shape[0] == contents.shape[0]+1)
-    get_bin_contents_cudakernel[32, 1024](values, edges, contents, out)
+    get_bin_contents_cudakernel[64, 512](values, edges, contents, out)
 
 @cuda.jit
 def calc_px_cudakernel(content_pt, content_phi, out):
@@ -290,7 +290,7 @@ def calc_px_cudakernel(content_pt, content_phi, out):
 
 def calc_px(content_pt, content_phi):
     out = cupy.zeros(content_pt.shape[0] - 1, dtype=cupy.float32)
-    calc_px_cudakernel[32, 1024](content_pt, content_phi, out)
+    calc_px_cudakernel[64, 512](content_pt, content_phi, out)
     cuda.synchronize()
     return out
 
@@ -304,7 +304,7 @@ def calc_py_cudakernel(content_pt, content_phi, out):
 
 def calc_py(content_pt, content_phi):
     out = cupy.zeros(content_pt.shape[0] - 1, dtype=cupy.float32)
-    calc_py_cudakernel[32, 1024](content_pt, content_phi, out)
+    calc_py_cudakernel[64, 512](content_pt, content_phi, out)
     cuda.synchronize()
     return out
 
@@ -318,7 +318,7 @@ def calc_pz_cudakernel(content_pt, content_eta, out):
 
 def calc_pz(content_pt, content_eta):
     out = cupy.zeros(content_pt.shape[0] - 1, dtype=cupy.float32)
-    calc_pz_cudakernel[32, 1024](content_pt, content_eta, out)
+    calc_pz_cudakernel[64, 512](content_pt, content_eta, out)
     cuda.synchronize()
     return out
 
@@ -332,7 +332,7 @@ def calc_en_cudakernel(content_pt, content_eta, content_mass, out):
 
 def calc_en(content_pt, content_eta, content_mass):
     out = cupy.zeros(content_pt.shape[0] - 1, dtype=cupy.float32)
-    calc_en_cudakernel[32, 1024](content_pt, content_eta, content_mass, out)
+    calc_en_cudakernel[64, 512](content_pt, content_eta, content_mass, out)
     cuda.synchronize()
     return out
 
@@ -372,7 +372,7 @@ def select_opposite_sign_muons_cudakernel(muon_charges_content, muon_charges_off
 
 def select_muons_opposite_sign(muons, in_mask):
     out_mask = cupy.invert(muons.make_mask())
-    select_opposite_sign_muons_cudakernel[32,1024](muons.charge, muons.offsets, in_mask, out_mask)
+    select_opposite_sign_muons_cudakernel[64, 512](muons.charge, muons.offsets, in_mask, out_mask)
     cuda.synchronize()
     return out_mask
 
@@ -412,7 +412,7 @@ def make_jets_inputs(content, offsets, nobj, feats, mask_rows, mask_content):
             feature = calc_en(content.pt, content.eta, content.mass)
         else:
             feature = getattr(content, f)
-        dnn_jets_cudakernel[32,1024](feature, offsets, feats.index(f), nobj, mask_rows, mask_content, out)
+        dnn_jets_cudakernel[64, 512](feature, offsets, feats.index(f), nobj, mask_rows, mask_content, out)
     cuda.synchronize()
     return out
 
@@ -447,7 +447,7 @@ def make_leps_inputs(electrons, muons, numEvents, feats, mask_rows, el_mask_cont
             feature["pz"] = calc_pz(feature["pt"], feature["eta"])
         elif f == "en":
             feature["en"] = calc_en(feature["pt"], feature["eta"], feature["mass"])
-        dnn_leps_cudakernel[32, 1024](feature[f], feats.index(f), mask_rows, out)
+        dnn_leps_cudakernel[64, 512](feature[f], feats.index(f), mask_rows, out)
     cuda.synchronize()
     return out
 
@@ -472,7 +472,7 @@ def make_met_inputs(content, numEvents, feats, mask_rows):
             feature = calc_py(content["MET_pt"], content["MET_phi"])
         else:
             feature = content["MET_" + f]
-        dnn_met_cudakernel[32, 1024](feature, feats.index(f), mask_rows, out)
+        dnn_met_cudakernel[64, 512](feature, feats.index(f), mask_rows, out)
     cuda.synchronize()
     return out
 
@@ -508,7 +508,7 @@ def dijet_masses(jets_feats, mask_events, DNN_pred):
 
     DNN_pred = cupy.argmax(DNN_pred, axis=1)
 
-    dijet_masses_cudakernel[32, 1024](jets_feats, mask_events, DNN_pred, comb, out)
+    dijet_masses_cudakernel[64, 512](jets_feats, mask_events, DNN_pred, comb, out)
     cuda.synchronize()
     return out
 
@@ -553,7 +553,7 @@ def mask_overlappingAK4(objs1, mask1, objs2, mask2, drcut, tau32cut, tau21cut):
     assert(objs1.offsets.shape == objs2.offsets.shape)
     
     mask_out = cupy.zeros_like(objs1.eta, dtype=cupy.bool)
-    mask_overlappingAK4_cudakernel[32, 1024](
+    mask_overlappingAK4_cudakernel[64, 512](
         objs1.eta, objs1.phi, mask1, objs1.offsets,
         objs2.eta, objs2.phi, mask2, objs2.offsets, objs2.tau32, objs2.tau21,
         drcut**2, tau32cut, tau21cut, mask_out
