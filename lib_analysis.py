@@ -125,7 +125,8 @@ def compute_lepton_weights(leps, lepton_x, lepton_y, mask_rows, mask_content, ev
     per_event_weights = ha.multiply_in_offsets(leps, weights, mask_rows, mask_content)
     return per_event_weights
 
-# btagging scale factor 
+# btagging scale factor
+#def compute_btag_weights(jets, mask_rows, mask_content, sf, jets_met_corrected, btagalgorithm, sys_type='central'):
 def compute_btag_weights(jets, mask_rows, mask_content, sf, jets_met_corrected, btagalgorithm):
 
     pJet_weight = NUMPY_LIB.ones(len(mask_content))
@@ -133,9 +134,9 @@ def compute_btag_weights(jets, mask_rows, mask_content, sf, jets_met_corrected, 
     for tag in [0, 4, 5]:
         
         if jets_met_corrected:
-            SF_btag = sf.eval('central', tag, abs(jets.eta), jets.pt_nom, getattr(jets, btagalgorithm), ignore_missing=True) 
+            SF_btag = sf.eval(sys_type, tag, abs(jets.eta), jets.pt_nom, getattr(jets, btagalgorithm), ignore_missing=True) 
         else:
-            SF_btag = sf.eval('central', tag, abs(jets.eta), jets.pt, getattr(jets, btagalgorithm), ignore_missing=True) 
+            SF_btag = sf.eval(sys_type, tag, abs(jets.eta), jets.pt, getattr(jets, btagalgorithm), ignore_missing=True) 
 
         SF_btag=NUMPY_LIB.array(SF_btag)
             
@@ -178,7 +179,12 @@ def evaluate_DNN(jets, good_jets, electrons, good_electrons, muons, good_muons, 
             
         
         inputs = [jets_feats, leps_feats, met_feats]
-
+        
+        if "fcn" in DNN:
+            batch_size = 100
+        else:
+            batch_size = 2000
+        
         if DNN.startswith("ffwd"):
             inputs = [NUMPY_LIB.reshape(x, (x.shape[0], -1)) for x in inputs]
             inputs = NUMPY_LIB.hstack(inputs)
@@ -212,7 +218,7 @@ def evaluate_DNN(jets, good_jets, electrons, good_electrons, muons, good_muons, 
         else:
             # run prediction (done on GPU)
             # in case of NUMPY_LIB is cupy: transfer numpy output back to cupy array for further computation
-            DNN_pred = NUMPY_LIB.array(DNN_model.predict(inputs, batch_size = 200))
+            DNN_pred = NUMPY_LIB.array(DNN_model.predict(inputs, batch_size = batch_size))
             if 'categorical' in DNN:
                 DNN_pred = DNN_pred[:,1]
             #if DNN.endswith("binary"):

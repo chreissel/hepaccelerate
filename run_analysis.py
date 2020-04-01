@@ -6,6 +6,7 @@ import argparse
 import json
 import numpy as np
 import sys
+from pprint import pprint
 
 import uproot
 import hepaccelerate
@@ -70,6 +71,19 @@ def analyze_data(data, sample, NUMPY_LIB=None, parameters={}, samples_info={}, i
     electrons = data["Electron"]
     scalars = data["eventvars"]
     jets = data["Jet"]
+    
+    muons.energy = ha.calc_en(muons.pt, muons.eta, muons.mass)
+    electrons.energy = ha.calc_en(electrons.pt, electrons.eta, electrons.mass)
+    jets.energy = ha.calc_en(jets.pt, jets.eta, jets.mass)
+    muons.px = ha.calc_px(muons.pt, muons.phi)
+    electrons.px = ha.calc_px(electrons.pt, electrons.phi)
+    jets.px = ha.calc_px(jets.pt, jets.phi)
+    muons.py = ha.calc_py(muons.pt, muons.phi)
+    electrons.py = ha.calc_py(electrons.pt, electrons.phi)
+    jets.py = ha.calc_py(jets.pt, jets.phi)
+    muons.pz = ha.calc_pz(muons.pt, muons.eta)
+    electrons.pz = ha.calc_pz(electrons.pt, electrons.eta)
+    jets.pz = ha.calc_pz(jets.pt, jets.eta)
 
     nEvents = muons.numevents()
     indices = {}
@@ -140,29 +154,59 @@ def analyze_data(data, sample, NUMPY_LIB=None, parameters={}, samples_info={}, i
     if jets_met_corrected: pt_label = "pt_nom"
     else: pt_label = "pt"
     variables = [
-        ("jet", jets, good_jets, "leading", [pt_label, "eta", "phi", "btagDeepFlavB", "mass"]),
-        ("jet", jets, good_jets, "subleading", [pt_label, "eta", "phi", "btagDeepFlavB", "mass"]),
-        ("jet", jets, good_jets, "third", [pt_label, "eta", "phi", "btagDeepFlavB", "mass"]),
-        ("jet", jets, good_jets, "fourth", [pt_label, "eta", "phi", "btagDeepFlavB", "mass"]),
-        ("jet", jets, good_jets, "fifth", [pt_label, "eta", "phi", "btagDeepFlavB", "mass"]),
-        ("jet", jets, good_jets, "sixth", [pt_label, "eta", "phi", "btagDeepFlavB", "mass"]),
-        ("jet", jets, good_jets, "seventh", [pt_label, "eta", "phi", "btagDeepFlavB", "mass"]),
-        ("jet", jets, good_jets, "eighth", [pt_label, "eta", "phi", "btagDeepFlavB", "mass"]),
-        ("jet", jets, good_jets, "ninth", [pt_label, "eta", "phi", "btagDeepFlavB", "mass"]),
-        ("jet", jets, good_jets, "tenth", [pt_label, "eta", "phi", "btagDeepFlavB", "mass"]),
+        ("jet", jets, good_jets, "leading", [pt_label, "eta", "phi", "btagDeepFlavB", "energy", "px", "py", "pz"]),
+        ("jet", jets, good_jets, "subleading", [pt_label, "eta", "phi", "btagDeepFlavB", "energy", "px", "py", "pz"]),
+        ("jet", jets, good_jets, "third", [pt_label, "eta", "phi", "btagDeepFlavB", "energy", "px", "py", "pz"]),
+        ("jet", jets, good_jets, "fourth", [pt_label, "eta", "phi", "btagDeepFlavB", "energy", "px", "py", "pz"]),
+        ("jet", jets, good_jets, "fifth", [pt_label, "eta", "phi", "btagDeepFlavB", "energy", "px", "py", "pz"]),
+        ("jet", jets, good_jets, "sixth", [pt_label, "eta", "phi", "btagDeepFlavB",  "energy", "px", "py", "pz"]),
+        ("jet", jets, good_jets, "seventh", [pt_label, "eta", "phi", "btagDeepFlavB",  "energy", "px", "py", "pz"]),
+        ("jet", jets, good_jets, "eighth", [pt_label, "eta", "phi", "btagDeepFlavB", "energy", "px", "py", "pz"]),
+        ("jet", jets, good_jets, "ninth", [pt_label, "eta", "phi", "btagDeepFlavB",  "energy", "px", "py", "pz"]),
+        ("jet", jets, good_jets, "tenth", [pt_label, "eta", "phi", "btagDeepFlavB",  "energy", "px", "py", "pz"]),
         ("bjet", jets, bjets, "leading", [pt_label, "eta"]),
     ]
 
     # special role of lepton
     var["leading_lepton_pt"] = NUMPY_LIB.maximum(ha.get_in_offsets(muons.pt, muons.offsets, indices["leading"], mask_events, good_muons), ha.get_in_offsets(electrons.pt, electrons.offsets, indices["leading"], mask_events, good_electrons))
-    var["leading_lepton_eta"] = NUMPY_LIB.maximum(ha.get_in_offsets(muons.eta, muons.offsets, indices["leading"], mask_events, good_muons), ha.get_in_offsets(electrons.eta, electrons.offsets, indices["leading"], mask_events, good_electrons))
-    var["leading_lepton_phi"] = NUMPY_LIB.maximum(ha.get_in_offsets(muons.phi, muons.offsets, indices["leading"], mask_events, good_muons), ha.get_in_offsets(electrons.phi, electrons.offsets, indices["leading"], mask_events, good_electrons))
-    var["leading_lepton_mass"] = NUMPY_LIB.maximum(ha.get_in_offsets(muons.mass, muons.offsets, indices["leading"], mask_events, good_muons), ha.get_in_offsets(electrons.mass, electrons.offsets, indices["leading"], mask_events, good_electrons))
+    compare_leps = ha.get_in_offsets(muons.pt, muons.offsets, indices["leading"], mask_events, good_muons) >= ha.get_in_offsets(electrons.pt, electrons.offsets, indices["leading"], mask_events, good_electrons)
+    
+    leading_lepton_eta = NUMPY_LIB.zeros(compare_leps.shape[0])
+    leading_lepton_eta[compare_leps] = ha.get_in_offsets(muons.eta, muons.offsets, indices["leading"], mask_events, good_muons)[compare_leps]
+    leading_lepton_eta[~compare_leps] = ha.get_in_offsets(electrons.eta, electrons.offsets, indices["leading"], mask_events, good_electrons)[~compare_leps]
+    var["leading_lepton_eta"] = leading_lepton_eta
+    
+    leading_lepton_phi = NUMPY_LIB.zeros(compare_leps.shape[0])
+    leading_lepton_phi[compare_leps] = ha.get_in_offsets(muons.phi, muons.offsets, indices["leading"], mask_events, good_muons)[compare_leps]
+    leading_lepton_phi[~compare_leps] = ha.get_in_offsets(electrons.phi, electrons.offsets, indices["leading"], mask_events, good_electrons)[~compare_leps]
+    var["leading_lepton_phi"] = leading_lepton_phi
+
+    leading_lepton_energy = NUMPY_LIB.zeros(compare_leps.shape[0])
+    leading_lepton_energy[compare_leps] = ha.get_in_offsets(muons.energy, muons.offsets, indices["leading"], mask_events, good_muons)[compare_leps]
+    leading_lepton_energy[~compare_leps] = ha.get_in_offsets(electrons.energy, electrons.offsets, indices["leading"], mask_events, good_electrons)[~compare_leps]
+    var["leading_lepton_energy"] = leading_lepton_energy
+
+    leading_lepton_px = NUMPY_LIB.zeros(compare_leps.shape[0])
+    leading_lepton_px[compare_leps] = ha.get_in_offsets(muons.px, muons.offsets, indices["leading"], mask_events, good_muons)[compare_leps]
+    leading_lepton_px[~compare_leps] = ha.get_in_offsets(electrons.px, electrons.offsets, indices["leading"], mask_events, good_electrons)[~compare_leps]
+    var["leading_lepton_px"] = leading_lepton_px
+    
+    leading_lepton_py = NUMPY_LIB.zeros(compare_leps.shape[0])
+    leading_lepton_py[compare_leps] = ha.get_in_offsets(muons.py, muons.offsets, indices["leading"], mask_events, good_muons)[compare_leps]
+    leading_lepton_py[~compare_leps] = ha.get_in_offsets(electrons.py, electrons.offsets, indices["leading"], mask_events, good_electrons)[~compare_leps]
+    var["leading_lepton_py"] = leading_lepton_py
+    
+    leading_lepton_pz = NUMPY_LIB.zeros(compare_leps.shape[0])
+    leading_lepton_pz[compare_leps] = ha.get_in_offsets(muons.pz, muons.offsets, indices["leading"], mask_events, good_muons)[compare_leps]
+    leading_lepton_pz[~compare_leps] = ha.get_in_offsets(electrons.pz, electrons.offsets, indices["leading"], mask_events, good_electrons)[~compare_leps]
+    var["leading_lepton_pz"] = leading_lepton_pz
+    
     var["MET_pt"] = scalars["MET_pt"]
     var["MET_phi"] = scalars["MET_phi"]
     var["MET_sumEt"] = scalars["MET_sumEt"]
-    
-    
+    var["MET_px"] = ha.calc_px(scalars["MET_pt"], scalars["MET_phi"])
+    var["MET_py"] = ha.calc_py(scalars["MET_pt"], scalars["MET_phi"])
+
     # all other variables
     for v in variables:
         calculate_variable_features(v, mask_events, indices, var)
@@ -189,6 +233,13 @@ def analyze_data(data, sample, NUMPY_LIB=None, parameters={}, samples_info={}, i
         weights["nominal"] = weights["nominal"] * muon_weights * electron_weights
 
         # btag SF corrections
+        #if btag_sf_var == 'up':
+        #    sys_str = [
+        #    'up_'
+        #    ]
+        #elif btag_sf_var == 'down':
+        #    
+        #else:
         btag_weights = compute_btag_weights(jets, mask_events, good_jets, parameters["btag_SF_target"], jets_met_corrected, parameters["btagging algorithm"])
         var["btag_weights"] = btag_weights
         weights["nominal"] = weights["nominal"] * btag_weights
@@ -291,11 +342,13 @@ def analyze_data(data, sample, NUMPY_LIB=None, parameters={}, samples_info={}, i
                     # TODO: Find out if class weights should be multiplied here as well
                     class_pred = NUMPY_LIB.argmax(DNN_pred, axis=1)
                     for n, n_name in zip([0,1,2,3,4,5], ["ttH", "ttbb", "tt2b", "ttb", "ttcc", "ttlf"]):
-                        node = (class_pred == n)
+                        node = (class_pred == n) #remove this and instead of (cut & node) just put cut
                         DNN_node = DNN_pred[:,n]
-                        hist_DNN = Histogram(*ha.histogram_from_vector(DNN_node[(cut & node)], weights["nominal"][(cut & node)], NUMPY_LIB.linspace(0.,1.,16)))
+                        hist_DNN = Histogram(*ha.histogram_from_vector(DNN_node[cut], weights["nominal"][cut], NUMPY_LIB.linspace(0.,1.,16)))
                         ret["hist_{0}_DNN_{1}".format(name, n_name)] = hist_DNN
-                        hist_DNN_ROC = Histogram(*ha.histogram_from_vector(DNN_node[(cut & node)], weights["nominal"][(cut & node)], NUMPY_LIB.linspace(0.,1.,1000)))
+                        hist_DNN_pred = Histogram(*ha.histogram_from_vector(DNN_node[(cut & node)], weights["nominal"][(cut & node)], NUMPY_LIB.linspace(0.,1.,16)))
+                        ret["hist_{0}_DNN_pred_{1}".format(name, n_name)] = hist_DNN_pred
+                        hist_DNN_ROC = Histogram(*ha.histogram_from_vector(DNN_node[cut], weights["nominal"][cut], NUMPY_LIB.linspace(0.,1.,1000)))
                         ret["hist_{0}_DNN_ROC_{1}".format(name, n_name)] = hist_DNN_ROC
                         #hist_DNN_zoom = Histogram(*ha.histogram_from_vector(DNN_pred[(cut & node)], weights["nominal"][(cut & node)], NUMPY_LIB.linspace(0.,170.,30)))
                         #ret["hist_{0}_DNN_zoom_{1}".format(name, n_name)] = hist_DNN_zoom
@@ -307,7 +360,7 @@ def analyze_data(data, sample, NUMPY_LIB=None, parameters={}, samples_info={}, i
                 else:
                     hist_DNN = Histogram(*ha.histogram_from_vector(DNN_pred[cut], weights["nominal"][cut], NUMPY_LIB.linspace(0.,1.,16)))
                     hist_DNN_zoom = Histogram(*ha.histogram_from_vector(DNN_pred[cut], weights["nominal"][cut], NUMPY_LIB.linspace(0.,170.,30)))
-                    hist_DNN_ROC = Histogram(*ha.histogram_from_vector(DNN_node[cut], weights["nominal"][cut], NUMPY_LIB.linspace(0.,1.,1000)))
+                    hist_DNN_ROC = Histogram(*ha.histogram_from_vector(DNN_pred[cut], weights["nominal"][cut], NUMPY_LIB.linspace(0.,1.,1000)))
                     ret["hist_{0}_DNN_ROC".format(name)] = hist_DNN_ROC
                     ret["hist_{0}_DNN".format(name)] = hist_DNN
                     ret["hist_{0}_DNN_zoom".format(name)] = hist_DNN_zoom

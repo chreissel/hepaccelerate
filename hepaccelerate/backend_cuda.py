@@ -214,7 +214,7 @@ def get_in_offsets_cudakernel(content, offsets, indices, mask_rows, mask_content
 
 def get_in_offsets(content, offsets, indices, mask_rows, mask_content):
     #out = cupy.zeros(len(offsets) - 1, dtype=content.dtype)
-    out = -999.*cupy.ones(len(offsets) - 1, dtype=content.dtype) #to avoid histos being filled with 0 for non-existing objects, i.e. in events with no fat jets
+    out = -1999.*cupy.ones(len(offsets) - 1, dtype=content.dtype) #to avoid histos being filled with 0 for non-existing objects, i.e. in events with no fat jets
     get_in_offsets_cudakernel[64, 512](content, offsets, indices, mask_rows, mask_content, out)
     cuda.synchronize()
     return out
@@ -285,11 +285,11 @@ def calc_px_cudakernel(content_pt, content_phi, out):
     xi = cuda.grid(1)
     xstride = cuda.gridsize(1)
 
-    for iobj in range(xi, content_pt.shape[0]-1, xstride):
+    for iobj in range(xi, content_pt.shape[0], xstride):
         out[iobj] = content_pt[iobj] * math.cos(content_phi[iobj])
 
 def calc_px(content_pt, content_phi):
-    out = cupy.zeros(content_pt.shape[0] - 1, dtype=cupy.float32)
+    out = cupy.zeros(content_pt.shape[0], dtype=cupy.float32)
     calc_px_cudakernel[64, 512](content_pt, content_phi, out)
     cuda.synchronize()
     return out
@@ -299,11 +299,11 @@ def calc_py_cudakernel(content_pt, content_phi, out):
     xi = cuda.grid(1)
     xstride = cuda.gridsize(1)
 
-    for iobj in range(xi, content_pt.shape[0]-1, xstride):
+    for iobj in range(xi, content_pt.shape[0], xstride):
         out[iobj] = content_pt[iobj] * math.sin(content_phi[iobj])
 
 def calc_py(content_pt, content_phi):
-    out = cupy.zeros(content_pt.shape[0] - 1, dtype=cupy.float32)
+    out = cupy.zeros(content_pt.shape[0], dtype=cupy.float32)
     calc_py_cudakernel[64, 512](content_pt, content_phi, out)
     cuda.synchronize()
     return out
@@ -313,11 +313,11 @@ def calc_pz_cudakernel(content_pt, content_eta, out):
     xi = cuda.grid(1)
     xstride = cuda.gridsize(1)
 
-    for iobj in range(xi, content_pt.shape[0]-1, xstride):
+    for iobj in range(xi, content_pt.shape[0], xstride):
         out[iobj] = content_pt[iobj] * math.sinh(content_eta[iobj])
 
 def calc_pz(content_pt, content_eta):
-    out = cupy.zeros(content_pt.shape[0] - 1, dtype=cupy.float32)
+    out = cupy.zeros(content_pt.shape[0], dtype=cupy.float32)
     calc_pz_cudakernel[64, 512](content_pt, content_eta, out)
     cuda.synchronize()
     return out
@@ -327,11 +327,11 @@ def calc_en_cudakernel(content_pt, content_eta, content_mass, out):
     xi = cuda.grid(1)
     xstride = cuda.gridsize(1)
 
-    for iobj in range(xi, content_pt.shape[0]-1, xstride):
+    for iobj in range(xi, content_pt.shape[0], xstride):
         out[iobj] = math.sqrt(content_mass[iobj]**2 + (1+math.sinh(content_eta[iobj])**2)*content_pt[iobj]**2)
 
 def calc_en(content_pt, content_eta, content_mass):
-    out = cupy.zeros(content_pt.shape[0] - 1, dtype=cupy.float32)
+    out = cupy.zeros(content_pt.shape[0], dtype=cupy.float32)
     calc_en_cudakernel[64, 512](content_pt, content_eta, content_mass, out)
     cuda.synchronize()
     return out
@@ -433,9 +433,19 @@ def make_leps_inputs(electrons, muons, numEvents, feats, mask_rows, el_mask_cont
 
     feature = {}
     feature["pt"] = cupy.maximum(get_in_offsets(muons.pt, muons.offsets, inds, mask_rows, mu_mask_content), get_in_offsets(electrons.pt, electrons.offsets, inds, mask_rows, el_mask_content))
-    feature["eta"] = cupy.maximum(get_in_offsets(muons.eta, muons.offsets, inds, mask_rows, mu_mask_content), get_in_offsets(electrons.eta, electrons.offsets, inds, mask_rows, el_mask_content))
-    feature["phi"] = cupy.maximum(get_in_offsets(muons.phi, muons.offsets, inds, mask_rows, mu_mask_content), get_in_offsets(electrons.phi, electrons.offsets, inds, mask_rows, el_mask_content))
-    feature["mass"] = cupy.maximum(get_in_offsets(muons.mass, muons.offsets, inds, mask_rows, mu_mask_content), get_in_offsets(electrons.mass, electrons.offsets, inds, mask_rows, el_mask_content))
+    compare = get_in_offsets(muons.pt, muons.offsets, inds, mask_rows, mu_mask_content) >= get_in_offsets(electrons.pt, electrons.offsets, inds, mask_rows, el_mask_content)
+    
+    feature["eta"] = cupy.zeros(compare.shape[0])
+    feature["eta"][compare] = get_in_offsets(muons.eta, muons.offsets, inds, mask_rows, mu_mask_content)[compare]
+    feature["eta"][~compare] = get_in_offsets(electrons.eta, electrons.offsets, inds, mask_rows, el_mask_content)[~compare]
+    
+    feature["phi"] = cupy.zeros(compare.shape[0])
+    feature["phi"][compare] = get_in_offsets(muons.phi, muons.offsets, inds, mask_rows, mu_mask_content)[compare]
+    feature["phi"][~compare] = get_in_offsets(electrons.phi, electrons.offsets, inds, mask_rows, el_mask_content)[~compare]
+    
+    feature["mass"] = cupy.zeros(compare.shape[0])
+    feature["mass"][compare] = get_in_offsets(muons.mass, muons.offsets, inds, mask_rows, mu_mask_content)[compare]
+    feature["mass"][~compare] = get_in_offsets(electrons.mass, electrons.offsets, inds, mask_rows, el_mask_content)[~compare]
 
     out = cupy.zeros((numEvents, 1, len(feats)), dtype=cupy.float32)
     for f in feats:

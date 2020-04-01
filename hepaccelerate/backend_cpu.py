@@ -152,7 +152,7 @@ def get_in_offsets_kernel(content, offsets, indices, mask_rows, mask_content, ou
 
 def get_in_offsets(content, offsets, indices, mask_rows, mask_content):
     #out = np.zeros(len(offsets) - 1, dtype=content.dtype)
-    out = -999.*np.ones(len(offsets) - 1, dtype=content.dtype) #to avoid histos being filled with 0 for non-existing objects, i.e. in events with no fat jets
+    out = -1999.*np.ones(len(offsets) - 1, dtype=content.dtype) #to avoid histos being filled with 0 for non-existing objects, i.e. in events with no fat jets
     get_in_offsets_kernel(content, offsets, indices, mask_rows, mask_content, out)
     return out
 
@@ -260,41 +260,41 @@ def get_bin_contents(values, edges, contents, out):
 # general functions for px, py, pz, en calculation
 @numba.njit(parallel=True)
 def calc_px_kernel(content_pt, content_phi, out):
-    for iobj in numba.prange(content_pt.shape[0]-1):
+    for iobj in numba.prange(content_pt.shape[0]):
         out[iobj] = content_pt[iobj] * np.cos(content_phi[iobj])
 
 def calc_px(content_pt, content_phi):
-    out = np.zeros(content_pt.shape[0]-1, dtype=content_pt.dtype)
+    out = np.zeros(content_pt.shape[0], dtype=content_pt.dtype)
     calc_px_kernel(content_pt, content_phi, out)
     return out
 
 @numba.njit(parallel=True)
 def calc_py_kernel(content_pt, content_phi, out):
-    for iobj in numba.prange(content_pt.shape[0]-1):
+    for iobj in numba.prange(content_pt.shape[0]):
         out[iobj] = content_pt[iobj] * np.sin(content_phi[iobj])
 
 def calc_py(content_pt, content_phi):
-    out = np.zeros(content_pt.shape[0]-1, dtype=content_pt.dtype)
+    out = np.zeros(content_pt.shape[0], dtype=content_pt.dtype)
     calc_py_kernel(content_pt, content_phi, out)
     return out
 
 @numba.njit(parallel=True)
 def calc_pz_kernel(content_pt, content_eta, out):
-    for iobj in numba.prange(content_pt.shape[0]-1):
+    for iobj in numba.prange(content_pt.shape[0]):
         out[iobj] = content_pt[iobj] * np.sinh(content_eta[iobj])
 
 def calc_pz(content_pt, content_eta):
-    out = np.zeros(content_pt.shape[0]-1, dtype=content_pt.dtype)
+    out = np.zeros(content_pt.shape[0], dtype=content_pt.dtype)
     calc_pz_kernel(content_pt, content_eta, out)
     return out
 
 @numba.njit(parallel=True)
 def calc_en_kernel(content_pt, content_eta, content_mass, out):
-    for iobj in numba.prange(content_pt.shape[0]-1):
+    for iobj in numba.prange(content_pt.shape[0]):
         out[iobj] = np.sqrt(content_mass[iobj]**2 + (1+np.sinh(content_eta[iobj])**2)*content_pt[iobj]**2)
 
 def calc_en(content_pt, content_eta, content_mass):
-    out = np.zeros(content_pt.shape[0]-1, dtype=content_pt.dtype)
+    out = np.zeros(content_pt.shape[0], dtype=content_pt.dtype)
     calc_en_kernel(content_pt, content_eta, content_mass, out)
     return out
 
@@ -405,9 +405,19 @@ def make_leps_inputs(electrons, muons, numEvents, feats, mask_rows, el_mask_cont
 
     feature = {}
     feature["pt"] = np.maximum(get_in_offsets(muons.pt, muons.offsets, inds, mask_rows, mu_mask_content), get_in_offsets(electrons.pt, electrons.offsets, inds, mask_rows, el_mask_content))
-    feature["eta"] = np.maximum(get_in_offsets(muons.eta, muons.offsets, inds, mask_rows, mu_mask_content), get_in_offsets(electrons.eta, electrons.offsets, inds, mask_rows, el_mask_content))
-    feature["phi"] = np.maximum(get_in_offsets(muons.phi, muons.offsets, inds, mask_rows, mu_mask_content), get_in_offsets(electrons.phi, electrons.offsets, inds, mask_rows, el_mask_content))
-    feature["mass"] = np.maximum(get_in_offsets(muons.mass, muons.offsets, inds, mask_rows, mu_mask_content), get_in_offsets(electrons.mass, electrons.offsets, inds, mask_rows, el_mask_content))
+    compare = get_in_offsets(muons.pt, muons.offsets, inds, mask_rows, mu_mask_content) >= get_in_offsets(electrons.pt, electrons.offsets, inds, mask_rows, el_mask_content)
+    
+    feature["eta"] = np.zeros(compare.shape[0])
+    feature["eta"][compare] = get_in_offsets(muons.eta, muons.offsets, inds, mask_rows, mu_mask_content)[compare]
+    feature["eta"][~compare] = get_in_offsets(electrons.eta, electrons.offsets, inds, mask_rows, el_mask_content)[~compare]
+    
+    feature["phi"] = np.zeros(compare.shape[0])
+    feature["phi"][compare] = get_in_offsets(muons.phi, muons.offsets, inds, mask_rows, mu_mask_content)[compare]
+    feature["phi"][~compare] = get_in_offsets(electrons.phi, electrons.offsets, inds, mask_rows, el_mask_content)[~compare]
+    
+    feature["mass"] = np.zeros(compare.shape[0])
+    feature["mass"][compare] = get_in_offsets(muons.mass, muons.offsets, inds, mask_rows, mu_mask_content)[compare]
+    feature["mass"][~compare] = get_in_offsets(electrons.mass, electrons.offsets, inds, mask_rows, el_mask_content)[~compare]
 
     out = np.zeros((numEvents, 1, len(feats)), dtype=np.float32)
     for f in feats:
