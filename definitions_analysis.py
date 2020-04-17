@@ -59,7 +59,7 @@ eraDependentParameters = {
         "pu_corrections_file" : "data/pileup_Cert_294927-306462_13TeV_PromptReco_Collisions17_withVar.root",
         "btag_SF_btagDeepB" : "./data/DeepCSV_94XSF_V5_B_F.btag.csv",
         "btag_SF_btagCSVV2" : "./data/CSVv2_94XSF_V2_B_F_2017.btag.csv",
-        "btag_SF_btagDeepFlavB" : "./data/sfs_deepjet_2017_19-11-11.btag.csv",
+        "btag_SF_btagDeepFlavB" : "./data/DeepFlavour_94XSF_V4_B_F.csv",
         #"BTagSFbtagCSVV2 * ./data/CSVv2_94XSF_V2_B_F_2017.btag.csv",
         #"btag_SF_btagDeepB * ./data/deepCSV_sfs_v2.btag.csv",
         #"BTagSF * ./data/DeepCSV_94XSF_V4_B_F.btag.csv"
@@ -75,10 +75,11 @@ eraDependentParameters = {
             #"BTagSF * ./data/deepCSV_sfs_v2.btag.csv"
         ],
         "btagging algorithm" : "btagDeepFlavB",
+        #"btagging algorithm" : "btagDeepB",
         "btagging WP" : 
             {"btagDeepB": 0.4941, # medium working point for btagDeepB
             "btagCSVV2": 0.8484, # medium working point for btagCSVV2
-            "btagDeepFlavB": 0.3033 # medium working point for btagDeepFlavB
+            "btagDeepFlavB": 0.3033, # medium working point for btagDeepFlavB
             },
         "bbtagging WP" : 0.8, # medium 2 working point for DeepDoubleB tagger
     }
@@ -421,5 +422,22 @@ histogram_settings = {
     "tau32_WHcandidates": (0,1,31),
     "tau21_fatjets": (0,1,31),
     "tau21_topcandidates": (0,1,31),
-    "tau21_WHcandidates": (0,1,31)
+    "tau21_WHcandidates": (0,1,31),
+    "btag_SF_central" : (0,5,31),
+    "btag_SF_up_cferr1" : (0,5,31),
+    "btag_SF_up_cferr2" : (0,5,31),
+    "btag_SF_up_hf" : (0,5,31),
+    "btag_SF_up_hfstats1" : (0,5,31),
+    "btag_SF_up_hfstats2" : (0,5,31),
+    "btag_SF_up_lf" : (0,5,31),
+    "btag_SF_up_lfstats1" : (0,5,31),
+    "btag_SF_up_lfstats2" : (0,5,31),
+    "btag_SF_down_cferr1" : (0,5,31),
+    "btag_SF_down_cferr2" : (0,5,31),
+    "btag_SF_down_hf" : (0,5,31),
+    "btag_SF_down_hfstats1" : (0,5,31),
+    "btag_SF_down_hfstats2" : (0,5,31),
+    "btag_SF_down_lf" : (0,5,31),
+    "btag_SF_down_lfstats1" : (0,5,31),
+    "btag_SF_down_lfstats2" : (0,5,31),
 }

@@ -62,7 +62,7 @@ def get_size(obj, seen=None):
     return size
 
 #This function will be called for every file in the dataset
-def analyze_data(data, sample, NUMPY_LIB=None, parameters={}, samples_info={}, is_mc=True, lumimask=None, cat=False, DNN=False, DNN_model=None, jets_met_corrected=True, outdir="./", btag_DNN='deepCSV'):
+def analyze_data(data, sample, NUMPY_LIB=None, parameters={}, samples_info={}, is_mc=True, lumimask=None, cat=False, DNN=False, DNN_model=None, jets_met_corrected=True, outdir="./", btag_DNN='deepCSV', btag_sf_var='central'):
     #Output structure that will be returned and added up among the files.
     #Should be relatively small.
     ret = Results()
@@ -233,16 +233,38 @@ def analyze_data(data, sample, NUMPY_LIB=None, parameters={}, samples_info={}, i
         weights["nominal"] = weights["nominal"] * muon_weights * electron_weights
 
         # btag SF corrections
-        #if btag_sf_var == 'up':
-        #    sys_str = [
-        #    'up_'
-        #    ]
-        #elif btag_sf_var == 'down':
-        #    
-        #else:
-        btag_weights = compute_btag_weights(jets, mask_events, good_jets, parameters["btag_SF_target"], jets_met_corrected, parameters["btagging algorithm"])
-        var["btag_weights"] = btag_weights
-        weights["nominal"] = weights["nominal"] * btag_weights
+        if btag_sf_var == "central":
+            full_btag_weights = {"central" : []}
+        else:
+            full_btag_weights = {
+            "central" : [],
+            "up_cferr1" : [],
+            "up_cferr2" : [],
+            "up_hf" : [],
+            "up_hfstats1" : [],
+            "up_hfstats2" : [],
+            "up_lf" : [],
+            "up_lfstats1" : [],
+            "up_lfstats2" : [],
+            "down_cferr1" : [],
+            "down_cferr2" : [],
+            "down_hf" : [],
+            "down_hfstats1" : [],
+            "down_hfstats2" : [],
+            "down_lf" : [],
+            "down_lfstats1" : [],
+            "down_lfstats2" : [],
+            }
+        
+        for key in full_btag_weights.keys():
+            full_btag_weights[key] = compute_btag_weights(jets, mask_events, good_jets, parameters["btag_SF_target"], jets_met_corrected, parameters["btagging algorithm"], key)
+            var['btag_SF_' + key] = full_btag_weights[key]
+            if key != 'central':
+                weights[key] = weights["nominal"]*full_btag_weights[key]
+
+        btag_weights = full_btag_weights['central']
+        weights["nominal"] = weights["nominal"]*btag_weights
+        
         if DNN == "save-arrays":
             scalars["njets"] = njets
             scalars["n"+btag_DNN] = btags
@@ -287,6 +309,9 @@ def analyze_data(data, sample, NUMPY_LIB=None, parameters={}, samples_info={}, i
             ret['multi_tgt_arrays'] = target
     else:
         processes["unsplit"] = mask_events
+    
+    if DNN=="save-arrays":
+        return ret
 
     for p in processes.keys():
 
@@ -334,36 +359,42 @@ def analyze_data(data, sample, NUMPY_LIB=None, parameters={}, samples_info={}, i
             for k in var.keys():
                 if not k in histogram_settings.keys():
                     raise Exception("please add variable {0} to definitions_analysis.py".format(k))
-                hist = Histogram(*ha.histogram_from_vector(var[k][cut], weights["nominal"][cut], NUMPY_LIB.linspace(histogram_settings[k][0], histogram_settings[k][1], histogram_settings[k][2])))
-                ret["hist_{0}_{1}".format(name, k)] = hist
+                for key in weights.keys():
+                    if k.startswith('btag_SF') and key != "nominal":
+                        continue
+                    hist = Histogram(*ha.histogram_from_vector(var[k][cut], weights[key][cut], NUMPY_LIB.linspace(histogram_settings[k][0], histogram_settings[k][1], histogram_settings[k][2])))
+                    ret["hist_{0}_{1}".format(name, k + "_" + key)] = hist
 
             if DNN and DNN != "save-arrays":
                 if DNN.endswith("multiclass"):
                     # TODO: Find out if class weights should be multiplied here as well
                     class_pred = NUMPY_LIB.argmax(DNN_pred, axis=1)
                     for n, n_name in zip([0,1,2,3,4,5], ["ttH", "ttbb", "tt2b", "ttb", "ttcc", "ttlf"]):
-                        node = (class_pred == n) #remove this and instead of (cut & node) just put cut
-                        DNN_node = DNN_pred[:,n]
-                        hist_DNN = Histogram(*ha.histogram_from_vector(DNN_node[cut], weights["nominal"][cut], NUMPY_LIB.linspace(0.,1.,16)))
-                        ret["hist_{0}_DNN_{1}".format(name, n_name)] = hist_DNN
-                        hist_DNN_pred = Histogram(*ha.histogram_from_vector(DNN_node[(cut & node)], weights["nominal"][(cut & node)], NUMPY_LIB.linspace(0.,1.,16)))
-                        ret["hist_{0}_DNN_pred_{1}".format(name, n_name)] = hist_DNN_pred
-                        hist_DNN_ROC = Histogram(*ha.histogram_from_vector(DNN_node[cut], weights["nominal"][cut], NUMPY_LIB.linspace(0.,1.,1000)))
-                        ret["hist_{0}_DNN_ROC_{1}".format(name, n_name)] = hist_DNN_ROC
-                        #hist_DNN_zoom = Histogram(*ha.histogram_from_vector(DNN_pred[(cut & node)], weights["nominal"][(cut & node)], NUMPY_LIB.linspace(0.,170.,30)))
-                        #ret["hist_{0}_DNN_zoom_{1}".format(name, n_name)] = hist_DNN_zoom
+                        for key in weights.keys():
+                            node = (class_pred == n) #remove this and instead of (cut & node) just put cut
+                            DNN_node = DNN_pred[:,n]
+                            hist_DNN = Histogram(*ha.histogram_from_vector(DNN_node[cut], weights[key][cut], NUMPY_LIB.linspace(0.,1.,16)))
+                            ret["hist_{0}_DNN_{1}_{2}".format(name, n_name, key)] = hist_DNN
+                            hist_DNN_pred = Histogram(*ha.histogram_from_vector(DNN_node[(cut & node)], weights[key][(cut & node)], NUMPY_LIB.linspace(0.,1.,16)))
+                            ret["hist_{0}_DNN_pred_{1}_{2}".format(name, n_name, key)] = hist_DNN_pred
+                            hist_DNN_ROC = Histogram(*ha.histogram_from_vector(DNN_node[cut], weights[key][cut], NUMPY_LIB.linspace(0.,1.,1000)))
+                            ret["hist_{0}_DNN_ROC_{1}_{2}".format(name, n_name, key)] = hist_DNN_ROC
+                            #hist_DNN_zoom = Histogram(*ha.histogram_from_vector(DNN_pred[(cut & node)], weights["nominal"][(cut & node)], NUMPY_LIB.linspace(0.,170.,30)))
+                            #ret["hist_{0}_DNN_zoom_{1}".format(name, n_name)] = hist_DNN_zoom
                 elif DNN=="mass_fit":
-                    hist_DNN = Histogram(*ha.histogram_from_vector(DNN_pred[cut], weights["nominal"][cut], NUMPY_LIB.linspace(0.,300.,30)))
-                    hist_DNN_zoom = Histogram(*ha.histogram_from_vector(DNN_pred[cut], weights["nominal"][cut], NUMPY_LIB.linspace(0.,170.,30)))
-                    ret["hist_{0}_DNN".format(name)] = hist_DNN
-                    ret["hist_{0}_DNN_zoom".format(name)] = hist_DNN_zoom
+                    for key in weights.keys():
+                        hist_DNN = Histogram(*ha.histogram_from_vector(DNN_pred[cut], weights[key][cut], NUMPY_LIB.linspace(0.,300.,30)))
+                        hist_DNN_zoom = Histogram(*ha.histogram_from_vector(DNN_pred[cut], weights[key][cut], NUMPY_LIB.linspace(0.,170.,30)))
+                        ret["hist_{0}_DNN_{1}".format(name, key)] = hist_DNN
+                        ret["hist_{0}_DNN_zoom_{1}".format(name, key)] = hist_DNN_zoom
                 else:
-                    hist_DNN = Histogram(*ha.histogram_from_vector(DNN_pred[cut], weights["nominal"][cut], NUMPY_LIB.linspace(0.,1.,16)))
-                    hist_DNN_zoom = Histogram(*ha.histogram_from_vector(DNN_pred[cut], weights["nominal"][cut], NUMPY_LIB.linspace(0.,170.,30)))
-                    hist_DNN_ROC = Histogram(*ha.histogram_from_vector(DNN_pred[cut], weights["nominal"][cut], NUMPY_LIB.linspace(0.,1.,1000)))
-                    ret["hist_{0}_DNN_ROC".format(name)] = hist_DNN_ROC
-                    ret["hist_{0}_DNN".format(name)] = hist_DNN
-                    ret["hist_{0}_DNN_zoom".format(name)] = hist_DNN_zoom
+                    for key in weights.keys():
+                        hist_DNN = Histogram(*ha.histogram_from_vector(DNN_pred[cut], weights[key][cut], NUMPY_LIB.linspace(0.,1.,16)))
+                        hist_DNN_zoom = Histogram(*ha.histogram_from_vector(DNN_pred[cut], weights[key][cut], NUMPY_LIB.linspace(0.,170.,30)))
+                        hist_DNN_ROC = Histogram(*ha.histogram_from_vector(DNN_pred[cut], weights[key][cut], NUMPY_LIB.linspace(0.,1.,1000)))
+                        ret["hist_{0}_DNN_ROC_{1}".format(name, key)] = hist_DNN_ROC
+                        ret["hist_{0}_DNN_{1}".format(name, key)] = hist_DNN
+                        ret["hist_{0}_DNN_zoom_{1}".format(name, key)] = hist_DNN_zoom
 
 
     #TODO: implement JECs
@@ -420,6 +451,7 @@ if __name__ == "__main__":
     parser.add_argument('--sample', action='store', help='sample name', type=str, default=None, required=True)
     parser.add_argument('--DNN', action='store', choices=['gnet_categorical_binary', 'gnet_fcn_categorical_binary', 'gnet_multiclass', 'gnet_fcn_multiclass','save-arrays','cmb_binary', 'cmb_multiclass', 'ffwd_binary', 'ffwd_multiclass', 'ffwd_categorical_binary', 'cmb_categorical_binary','cmb_categorical_prtrn_binary',False, 'mass_fit'], help='options for DNN evaluation / preparation', default=False)
     parser.add_argument('--btag-DNN', action='store', choices=['deepCSV', 'CSVV2','deepFlav'], help='choose which btagger to use for DNN evaluation or saving arrays', default='deepCSV')
+    parser.add_argument('--btag-sf-var', action='store', choices=['up', 'down', 'central'], help='variation of btagging scalefactors. Can be up, down or central (default)', type=str, default='central', required=False)
     parser.add_argument('--categories', nargs='+', help='categories to be processed (default: sl_jge4_tge2)', default="sl_jge4_tge2")
     parser.add_argument('--path-to-model', action='store', help='path to DNN model', type=str, default=None, required=False)
     parser.add_argument('--year', action='store', choices=['2016', '2017', '2018'], help='Year of data/MC samples', default='2017')
@@ -567,7 +599,7 @@ if __name__ == "__main__":
             print(args.categories)
 
             #### this is where the magic happens: run the main analysis
-            results += dataset.analyze(analyze_data, NUMPY_LIB=NUMPY_LIB, parameters=parameters, is_mc = is_mc, lumimask=lumimask, cat=args.categories, sample=args.sample, samples_info=samples_info, DNN=args.DNN, DNN_model=model, jets_met_corrected=args.jets_met_corrected, outdir=args.outdir, btag_DNN = args.btag_DNN)
+            results += dataset.analyze(analyze_data, NUMPY_LIB=NUMPY_LIB, parameters=parameters, is_mc = is_mc, lumimask=lumimask, cat=args.categories, sample=args.sample, samples_info=samples_info, DNN=args.DNN, DNN_model=model, jets_met_corrected=args.jets_met_corrected, outdir=args.outdir, btag_DNN = args.btag_DNN, btag_sf_var=args.btag_sf_var)
             
     if args.DNN == 'save-arrays':
         print("results keys: {}".format(results.keys()))
